@@ -1,0 +1,12 @@
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/cipher-06b3cf9780c1206d.d: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/block.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/errors.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream_core.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream_wrapper.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/libcipher-06b3cf9780c1206d.rlib: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/block.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/errors.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream_core.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream_wrapper.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/libcipher-06b3cf9780c1206d.rmeta: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/block.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/errors.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream_core.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream_wrapper.rs
+
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/lib.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/block.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/errors.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream_core.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cipher-0.4.4/src/stream_wrapper.rs:

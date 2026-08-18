@@ -1,0 +1,11 @@
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/arboard-6c39778b82bacb03.d: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/mod.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/x11.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/libarboard-6c39778b82bacb03.rlib: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/mod.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/x11.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/libarboard-6c39778b82bacb03.rmeta: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/mod.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/x11.rs
+
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/mod.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/linux/x11.rs:

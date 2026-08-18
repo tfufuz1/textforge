@@ -1,0 +1,12 @@
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/async_trait-83470883f11690ae.d: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/args.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/bound.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/expand.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/lifetime.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/parse.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/receiver.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/verbatim.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/libasync_trait-83470883f11690ae.so: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/args.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/bound.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/expand.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/lifetime.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/parse.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/receiver.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/verbatim.rs
+
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/lib.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/args.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/bound.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/expand.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/lifetime.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/parse.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/receiver.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/async-trait-0.1.92/src/verbatim.rs:

@@ -1,0 +1,11 @@
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/string_cache-8ad9ae7845fc3f85.d: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/atom.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/dynamic_set.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/static_sets.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/trivial_impls.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/libstring_cache-8ad9ae7845fc3f85.rlib: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/atom.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/dynamic_set.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/static_sets.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/trivial_impls.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/libstring_cache-8ad9ae7845fc3f85.rmeta: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/atom.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/dynamic_set.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/static_sets.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/trivial_impls.rs
+
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/lib.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/atom.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/dynamic_set.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/static_sets.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/string_cache-0.9.0/src/trivial_impls.rs:

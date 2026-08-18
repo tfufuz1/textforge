@@ -1,0 +1,7 @@
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/debug_unreachable-af7e51c21146ec48.d: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/new_debug_unreachable-1.0.6/src/lib.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/libdebug_unreachable-af7e51c21146ec48.rlib: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/new_debug_unreachable-1.0.6/src/lib.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/libdebug_unreachable-af7e51c21146ec48.rmeta: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/new_debug_unreachable-1.0.6/src/lib.rs
+
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/new_debug_unreachable-1.0.6/src/lib.rs:

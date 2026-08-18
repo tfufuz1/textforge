@@ -1,0 +1,12 @@
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/bitflags-d88b30824bcfaa3d.d: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/iter.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/parser.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/traits.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/public.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/internal.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/external.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/external/serde.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/libbitflags-d88b30824bcfaa3d.rmeta: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/iter.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/parser.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/traits.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/public.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/internal.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/external.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/external/serde.rs
+
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/lib.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/iter.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/parser.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/traits.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/public.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/internal.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/external.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bitflags-2.13.1/src/external/serde.rs:

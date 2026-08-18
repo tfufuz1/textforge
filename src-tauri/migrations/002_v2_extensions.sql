@@ -1,0 +1,4 @@
+ALTER TABLE snippets ADD COLUMN source_app TEXT;
+ALTER TABLE snippets ADD COLUMN is_template INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE snippets ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE snippets ADD COLUMN color TEXT CHECK(color GLOB '#??????' OR color IS NULL);

@@ -1,0 +1,10 @@
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/zerovec_derive-e2cb446a49745b14.d: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/make_ule.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/make_varule.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/ule.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/utils.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/varule.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/libzerovec_derive-e2cb446a49745b14.so: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/make_ule.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/make_varule.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/ule.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/utils.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/varule.rs
+
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/lib.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/make_ule.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/make_varule.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/ule.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/utils.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerovec-derive-0.11.4/src/varule.rs:

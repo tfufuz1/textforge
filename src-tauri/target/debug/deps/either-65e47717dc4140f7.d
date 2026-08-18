@@ -1,0 +1,11 @@
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/either-65e47717dc4140f7.d: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/serde_untagged.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/serde_untagged_optional.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/iterator.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/into_either.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/libeither-65e47717dc4140f7.rlib: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/serde_untagged.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/serde_untagged_optional.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/iterator.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/into_either.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/libeither-65e47717dc4140f7.rmeta: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/serde_untagged.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/serde_untagged_optional.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/iterator.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/into_either.rs
+
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/lib.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/serde_untagged.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/serde_untagged_optional.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/iterator.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/either-1.17.0/src/into_either.rs:

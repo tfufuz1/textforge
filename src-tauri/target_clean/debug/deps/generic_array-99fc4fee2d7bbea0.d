@@ -1,0 +1,11 @@
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/generic_array-99fc4fee2d7bbea0.d: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/hex.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/impls.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/arr.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/functional.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/iter.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/sequence.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/libgeneric_array-99fc4fee2d7bbea0.rmeta: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/hex.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/impls.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/arr.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/functional.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/iter.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/sequence.rs
+
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/lib.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/hex.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/impls.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/arr.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/functional.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/iter.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/generic-array-0.14.7/src/sequence.rs:

@@ -1,0 +1,9 @@
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/zerofrom-4a230ea612fa277f.d: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/macro_impls.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/zero_from.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/libzerofrom-4a230ea612fa277f.rlib: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/macro_impls.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/zero_from.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target_clean/debug/deps/libzerofrom-4a230ea612fa277f.rmeta: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/macro_impls.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/zero_from.rs
+
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/lib.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/macro_impls.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/zerofrom-0.1.8/src/zero_from.rs:

@@ -1,0 +1,12 @@
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/writeable-10c7b18e15bb6814.d: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/cmp.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/concat.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/impls.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/ops.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/parts_write_adapter.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/replace.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/try_writeable.rs
+
+/home/freddy/Projekte/TextForge/src-tauri/target/debug/deps/libwriteable-10c7b18e15bb6814.rmeta: /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/lib.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/cmp.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/concat.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/impls.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/ops.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/parts_write_adapter.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/replace.rs /home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/try_writeable.rs
+
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/lib.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/cmp.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/concat.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/impls.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/ops.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/parts_write_adapter.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/replace.rs:
+/home/freddy/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/writeable-0.6.4/src/try_writeable.rs:
