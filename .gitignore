@@ -1,4 +1,5 @@
 node_modules
+/node_modules
 
 # Output
 .output
@@ -7,6 +8,13 @@ node_modules
 .wrangler
 /.svelte-kit
 /build
+
+# Rust target
+/src-tauri/target
+src-tauri/target/
+/target
+target/
+*.db
 
 # OS
 .DS_Store
