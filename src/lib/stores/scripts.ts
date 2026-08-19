@@ -51,16 +51,25 @@ export async function handleUpdateScript(id: string, draft: Partial<ScriptDto>) 
   }
 }
 
-export async function handleTestScript(input: string, jsCode?: string) {
+export async function handleTestScript(
+  input: string,
+  draftCode?: { jsCode?: string; regexPattern?: string; regexReplacement?: string; regexFlags?: string }
+) {
   const active = get(activeScriptStore);
-  if (!active && !jsCode) return;
+  if (!active && !draftCode) return;
 
   try {
-    const result = await executeScript({
-      scriptId: active?.id,
-      jsCode,
-      input
-    });
+    const req: any = { input };
+    if (active) {
+      req.scriptId = active.id;
+    }
+    if (draftCode) {
+      if (draftCode.jsCode !== undefined) req.jsCode = draftCode.jsCode;
+      if (draftCode.regexPattern !== undefined) req.regexPattern = draftCode.regexPattern;
+      if (draftCode.regexReplacement !== undefined) req.regexReplacement = draftCode.regexReplacement;
+      if (draftCode.regexFlags !== undefined) req.regexFlags = draftCode.regexFlags;
+    }
+    const result = await executeScript(req);
     executionResultStore.set(result);
     return result;
   } catch (e) {

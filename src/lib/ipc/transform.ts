@@ -123,7 +123,15 @@ export async function updateScript(id: string, draft: UpdateScriptDto): Promise<
   return invoke('update_script', { id, draft });
 }
 
-export async function executeScript(req: { scriptId?: string; jsCode?: string; input: string }): Promise<ScriptExecutionResultDto> {
+export async function executeScript(req: {
+  scriptId?: string;
+  jsCode?: string;
+  regexPattern?: string;
+  regexReplacement?: string;
+  regexFlags?: string;
+  input: string;
+  paramsJson?: string;
+}): Promise<ScriptExecutionResultDto> {
   return invoke('execute_script', { req });
 }
 

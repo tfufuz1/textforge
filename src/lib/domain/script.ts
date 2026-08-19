@@ -93,4 +93,83 @@ export const Script = {
       });
     }
   },
+
+  substituteParams: (text: string, params: ParameterValues = {}): string => {
+    let result = text;
+    for (const [k, v] of Object.entries(params)) {
+      const placeholder = new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}`, 'g');
+      result = result.replace(placeholder, String(v));
+    }
+    return result;
+  },
+
+  executeRegex: (
+    input: string,
+    pattern: string,
+    replacement: string,
+    flags: string = 'g',
+    params: ParameterValues = {}
+  ): Result<DomainError, string> => {
+    const subPattern = Script.substituteParams(pattern, params);
+    const subReplacement = Script.substituteParams(replacement, params);
+    const reResult = Script.validateRegex(subPattern, flags);
+    if (reResult._tag === 'Err') {
+      return reResult;
+    }
+    try {
+      const output = input.replace(reResult.value, subReplacement);
+      return Result.ok(output);
+    } catch (e: any) {
+      return Result.err({
+        code: 'SCRIPT_RUNTIME_ERROR',
+        details: e.message || String(e),
+      });
+    }
+  },
+
+  executeJS: (
+    input: string,
+    jsCode: string,
+    params: ParameterValues = {}
+  ): Result<DomainError, string> => {
+    try {
+      const utils = {
+        lines: (t: string) => String(t || '').split(/\r?\n/),
+        unlines: (arr: any) => Array.isArray(arr) ? arr.join('\n') : String(arr),
+        words: (t: string) => String(t || '').trim().split(/\s+/).filter(Boolean),
+        sortLines: (t: string) => utils.lines(t).sort().join('\n'),
+        uniqueLines: (t: string) => Array.from(new Set(utils.lines(t))).join('\n'),
+        reverseLines: (t: string) => utils.lines(t).reverse().join('\n'),
+        trim: (t: string) => String(t || '').trim(),
+        uppercase: (t: string) => String(t || '').toUpperCase(),
+        lowercase: (t: string) => String(t || '').toLowerCase(),
+        prettyJSON: (t: string) => JSON.stringify(JSON.parse(t), null, 2),
+        minifyJSON: (t: string) => JSON.stringify(JSON.parse(t)),
+        base64Encode: (t: string) => typeof btoa === 'function' ? btoa(t) : ((globalThis as any).Buffer ? (globalThis as any).Buffer.from(t).toString('base64') : t),
+        base64Decode: (t: string) => typeof atob === 'function' ? atob(t) : ((globalThis as any).Buffer ? (globalThis as any).Buffer.from(t, 'base64').toString('utf-8') : t),
+        redact: (t: string, mask = '***') => String(t || '').replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, mask),
+      };
+
+      const fn = new Function('input', 'utils', 'params', `
+        ${jsCode.includes('return') ? jsCode : `return (${jsCode});`}
+      `);
+
+      const rawResult = fn(input, utils, params);
+      if (rawResult === undefined || rawResult === null) {
+        return Result.ok('');
+      }
+      if (typeof rawResult === 'string') {
+        return Result.ok(rawResult);
+      }
+      if (typeof rawResult === 'object') {
+        return Result.ok(JSON.stringify(rawResult, null, 2));
+      }
+      return Result.ok(String(rawResult));
+    } catch (e: any) {
+      return Result.err({
+        code: 'SCRIPT_RUNTIME_ERROR',
+        details: e.message || String(e),
+      });
+    }
+  },
 } as const;

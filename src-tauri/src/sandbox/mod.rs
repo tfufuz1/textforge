@@ -146,20 +146,86 @@ fn run_script_sync(
 
         let prelude = r#"
             const utils = {
-                lines: (t) => String(t || '').split(/\r?\n/),
-                unlines: (arr) => Array.isArray(arr) ? arr.join('\n') : String(arr),
-                words: (t) => String(t || '').trim().split(/\s+/).filter(Boolean),
-                sortLines: (t) => utils.lines(t).sort().join('\n'),
-                uniqueLines: (t) => Array.from(new Set(utils.lines(t))).join('\n'),
-                reverseLines: (t) => utils.lines(t).reverse().join('\n'),
-                trim: (t) => String(t || '').trim(),
-                uppercase: (t) => String(t || '').toUpperCase(),
-                lowercase: (t) => String(t || '').toLowerCase(),
-                prettyJSON: (t) => JSON.stringify(JSON.parse(t), null, 2),
-                minifyJSON: (t) => JSON.stringify(JSON.parse(t)),
-                base64Encode: (t) => btoa(t),
-                base64Decode: (t) => atob(t),
-                redact: (t, mask = '***') => String(t || '').replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, mask)
+                lines: (s) => String(s || '').split(/\r?\n/),
+                unlines: (arr) => Array.isArray(arr) ? arr.join('\n') : String(arr || ''),
+                words: (s) => String(s || '').trim().split(/\s+/).filter(Boolean),
+                unwords: (arr) => Array.isArray(arr) ? arr.join(' ') : String(arr || ''),
+                trim: (s) => String(s || '').trim(),
+                trimLines: (s) => utils.unlines(utils.lines(s).map(l => l.trim())),
+                truncate: (s, n) => {
+                    const str = String(s || '');
+                    return str.length <= n ? str : str.slice(0, n) + '…';
+                },
+                wrap: (s, n) => {
+                    const words = String(s || '').split(' ');
+                    const result = [];
+                    let line = '';
+                    for (const w of words) {
+                        if ((line + w).length > n) { result.push(line.trimEnd()); line = ''; }
+                        line += w + ' ';
+                    }
+                    if (line.trim()) result.push(line.trimEnd());
+                    return result.join('\n');
+                },
+                padLeft: (s, n, c) => String(s || '').padStart(n, c || ' '),
+                padRight: (s, n, c) => String(s || '').padEnd(n, c || ' '),
+                repeat: (s, n) => String(s || '').repeat(n),
+                reverse: (s) => [...String(s || '')].reverse().join(''),
+                capitalize: (s) => {
+                    const str = String(s || '');
+                    return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+                },
+                titleCase: (s) => String(s || '').replace(/\b\w/g, c => c.toUpperCase()),
+                slugify: (s) => String(s || '').toLowerCase().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, ''),
+                camelToSnake: (s) => String(s || '').replace(/[A-Z]/g, c => '_' + c.toLowerCase()),
+                snakeToCamel: (s) => String(s || '').replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
+                count: (s, sub) => (String(s || '').match(new RegExp(String(sub || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length,
+
+                sortLines: (s) => utils.unlines(utils.lines(s).sort()),
+                uniqueLines: (s) => utils.unlines([...new Set(utils.lines(s))]),
+                reverseLines: (s) => utils.unlines(utils.lines(s).reverse()),
+                filterLines: (s, pred) => utils.unlines(utils.lines(s).filter(pred)),
+                mapLines: (s, fn) => utils.unlines(utils.lines(s).map(fn)),
+                numberedLines: (s) => utils.unlines(utils.lines(s).map((l, i) => `${i + 1}. ${l}`)),
+                prefixLines: (s, pfx) => utils.mapLines(s, l => pfx + l),
+                suffixLines: (s, sfx) => utils.mapLines(s, l => l + sfx),
+                indentLines: (s, n) => utils.prefixLines(s, ' '.repeat(n)),
+
+                prettyJSON: (s) => JSON.stringify(JSON.parse(s), null, 2),
+                minifyJSON: (s) => JSON.stringify(JSON.parse(s)),
+                parseJSON: (s) => JSON.parse(s),
+                stringifyJSON: (v, ind) => JSON.stringify(v, null, ind ?? 2),
+                jsonKeys: (s) => Object.keys(JSON.parse(s)).join('\n'),
+
+                wrapMarkdown: (s, lang) => '```' + (lang || '') + '\n' + String(s || '') + '\n```',
+                stripMarkdown: (s) => String(s || '').replace(/#{1,6}\s|(\*\*|__)(.*?)\1|\*|_|\[([^\]]*)\]\([^)]*\)|`[^`]*`|```[\s\S]*?```/g, '$3'),
+                extractCodeBlocks: (s) => {
+                    const blocks = [...String(s || '').matchAll(/```(?:\w+)?\n([\s\S]*?)```/g)].map(m => m[1]);
+                    return blocks.join('\n---\n');
+                },
+
+                redact: (s) => String(s || '')
+                    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[IP]')
+                    .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL]')
+                    .replace(/\b(sk|pk|api)[-_][\w\-]{8,}/gi, '[API_KEY]')
+                    .replace(/Bearer\s+[\w\-._~+/]+=*/gi, 'Bearer [TOKEN]')
+                    .replace(/\b(?:\d[ \-]?){13,16}\b/g, '[CARD]'),
+
+                base64Encode: (s) => btoa(String(s || '')),
+                base64Decode: (s) => atob(String(s || '')),
+                urlEncode: (s) => encodeURIComponent(String(s || '')),
+                urlDecode: (s) => decodeURIComponent(String(s || '')),
+                htmlEscape: (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'),
+                htmlUnescape: (s) => String(s || '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'"),
+
+                charCount: (s) => String(s || '').length,
+                wordCount: (s) => String(s || '').trim() === '' ? 0 : String(s || '').trim().split(/\s+/).length,
+                lineCount: (s) => String(s || '').split('\n').length,
+                tokenEstimate: (s) => Math.round(Math.max(String(s || '').length / 4, utils.wordCount(s) * 0.75)),
+
+                today: () => new Date().toISOString().split('T')[0],
+                timestamp: () => new Date().toISOString(),
+                unixMs: () => Date.now(),
             };
         "#;
 
@@ -172,10 +238,20 @@ fn run_script_sync(
                 try {{
                     params = JSON.parse(sandboxParamsJson);
                 }} catch(e) {{}}
-                let transform = function(text, params) {{
+                let transform = function(input, params, utils) {{
                     {js_code}
                 }};
-                return transform(input, params);
+                let res = transform(input, params, utils);
+                if (res === undefined || res === null) {{
+                    return "";
+                }}
+                if (typeof res === "string") {{
+                    return res;
+                }}
+                if (typeof res === "object") {{
+                    return JSON.stringify(res, null, 2);
+                }}
+                return String(res);
             }})()
             "#
         );
