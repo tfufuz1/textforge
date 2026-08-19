@@ -23,4 +23,15 @@ describe('ClipboardEntry', () => {
             expect(entry.lineCount).toBe(1);
         }
     });
+
+    test('toSnippetDraft maps entry to a draft with trimmed snippet title and inbox location', () => {
+        const result = ClipboardEntry.create('  Sample text for snippet creation  ', Option.none());
+        expect(result._tag).toBe('Some');
+        if (result._tag === 'Some') {
+            const draft = ClipboardEntry.toSnippetDraft(result.value);
+            expect(draft.title).toBe('Sample text for snippet creation');
+            expect(draft.content).toBe('  Sample text for snippet creation  ');
+            expect(draft.location).toEqual({ _type: 'inbox' });
+        }
+    });
 });

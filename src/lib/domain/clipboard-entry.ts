@@ -1,7 +1,7 @@
 import { Option, ClipEntryId } from './adts';
 import type { SnippetId, UnixMs, ByteSize, TagName } from './adts';
 import { detectContentType } from './snippet';
-import type { ContentType } from './snippet';
+import type { ContentType, SnippetLocation } from './snippet';
 
 export interface ClipboardEntry {
   readonly id:           ClipEntryId;
@@ -41,5 +41,11 @@ export const ClipboardEntry = {
       tags:         [],
       promotedToSnippetId: Option.none(),
     });
-  }
+  },
+
+  toSnippetDraft: (entry: ClipboardEntry): { title: string; content: string; location: SnippetLocation } => ({
+    title:    entry.content.slice(0, 60).trim() || 'Clipboard-Import',
+    content:  entry.content,
+    location: { _type: 'inbox' },
+  }),
 } as const;
