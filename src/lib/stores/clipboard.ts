@@ -19,7 +19,13 @@ export const clipboardFilterStore = writable<ClipboardFilter>({
 
 export async function loadClipboardHistory() {
     try {
-        const result = await listClipboardHistory(0, 50);
+        const filterState = get(clipboardFilterStore);
+        const filterDto = {
+            searchQuery: filterState.searchQuery._tag === 'Some' ? filterState.searchQuery.value : null,
+            contentTypes: filterState.contentTypes,
+            sourceApps: filterState.sourceApps,
+        };
+        const result = await listClipboardHistory(filterDto, 0, 50);
         clipboardStore.set(result.items);
     } catch (e) {
         console.error("Failed to load clipboard history:", e);
@@ -27,13 +33,6 @@ export async function loadClipboardHistory() {
 }
 
 export const filteredClipboard = derived(
-    [clipboardStore, clipboardFilterStore],
-    ([$clipboard, $filter]) => {
-        let result = $clipboard;
-        if ($filter.searchQuery._tag === 'Some' && $filter.searchQuery.value) {
-            const query = $filter.searchQuery.value.toLowerCase();
-            result = result.filter(r => r.preview.toLowerCase().includes(query));
-        }
-        return result;
-    }
+    [clipboardStore],
+    ([$clipboard]) => $clipboard
 );

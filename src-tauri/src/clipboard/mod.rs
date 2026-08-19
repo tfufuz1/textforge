@@ -143,11 +143,17 @@ async fn insert_clipboard_entry(app_handle: &AppHandle, content: &str) {
             let id = uuid::Uuid::new_v4().to_string();
             let now = chrono::Utc::now().timestamp_millis();
 
-            let content_type = if content.starts_with("http://") || content.starts_with("https://")
-            {
+            let trimmed = content.trim();
+            let content_type = if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
                 "url"
-            } else if content.starts_with('{') || content.starts_with('[') {
+            } else if (trimmed.starts_with('{') && trimmed.ends_with('}')) || (trimmed.starts_with('[') && trimmed.ends_with(']')) {
                 "json"
+            } else if trimmed.starts_with("<html") || trimmed.starts_with("<!DOCTYPE html") || trimmed.starts_with("<div") {
+                "html"
+            } else if trimmed.starts_with("<?xml") || trimmed.starts_with("<svg") {
+                "xml"
+            } else if trimmed.starts_with("# ") || trimmed.contains("\n# ") || trimmed.contains("```") {
+                "markdown"
             } else {
                 "plain_text"
             };

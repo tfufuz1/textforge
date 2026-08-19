@@ -1,10 +1,20 @@
 <script lang="ts">
-    import { pinEntry, deleteEntry, promoteToSnippet } from '../../ipc/clipboard';
+    import { pinEntry, deleteEntry, promoteToSnippet, getClipboardEntry, writeToClipboard } from '../../ipc/clipboard';
     import { loadClipboardHistory } from '../../stores/clipboard';
     import { pushUndoAction } from '../../stores/undo';
     import { pushNotification, Notifications } from '../../stores/notifications';
 
     let { entry } = $props();
+
+    async function handleCopy() {
+        try {
+            const detail = await getClipboardEntry(entry.id);
+            await writeToClipboard(detail.content);
+            pushNotification(Notifications.snippetCopied());
+        } catch (e) {
+            console.error("Failed to copy clipboard entry:", e);
+        }
+    }
 
     async function handlePin() {
         await pinEntry(entry.id, !entry.isPinned);
@@ -36,6 +46,9 @@
             + Snippet
         </button>
     {/if}
+    <button class="px-2.5 py-1 bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700/50 rounded-lg text-xs font-medium transition-colors" onclick={handleCopy} title="Kopieren">
+        📋 Kopieren
+    </button>
     <button class="px-2.5 py-1 bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700/50 rounded-lg text-xs font-medium transition-colors" onclick={handlePin}>
         {entry.isPinned ? '📌 Pinned' : '📍 Pin'}
     </button>

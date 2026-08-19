@@ -9,6 +9,7 @@
             ...f,
             searchQuery: searchQuery ? Option.some(searchQuery) : Option.none()
         }));
+        await loadClipboardHistory();
     }
 </script>
 
