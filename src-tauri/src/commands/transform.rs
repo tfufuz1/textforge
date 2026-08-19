@@ -10,6 +10,9 @@ use crate::commands::builtins;
 pub struct ExecuteScriptDto {
     pub script_id: Option<String>,
     pub js_code: Option<String>,
+    pub regex_pattern: Option<String>,
+    pub regex_replacement: Option<String>,
+    pub regex_flags: Option<String>,
     pub input: String,
     pub params_json: Option<String>,
 }
@@ -67,38 +70,9 @@ pub async fn execute_script(
         if row.script_type == "regex" {
             let pattern = row.regex_pattern.unwrap_or_default();
             let replacement = row.regex_replacement.unwrap_or_default();
-            let mut builder = regex::RegexBuilder::new(&pattern);
-            if row.regex_flags.contains('i') {
-                builder.case_insensitive(true);
-            }
-            if row.regex_flags.contains('m') {
-                builder.multi_line(true);
-            }
-            if row.regex_flags.contains('s') {
-                builder.dot_matches_new_line(true);
-            }
-
-            match builder.build() {
-                Ok(re) => {
-                    let output = re.replace_all(&req.input, replacement.as_str()).to_string();
-                    let elapsed = start.elapsed().as_millis() as u32;
-                    return Ok(ScriptExecutionResultDto {
-                        output,
-                        execution_time_ms: elapsed,
-                        console_logs: vec![],
-                        error: None,
-                    });
-                }
-                Err(e) => {
-                    let elapsed = start.elapsed().as_millis() as u32;
-                    return Ok(ScriptExecutionResultDto {
-                        output: req.input.clone(),
-                        execution_time_ms: elapsed,
-                        console_logs: vec![],
-                        error: Some(format!("Regex error: {}", e)),
-                    });
-                }
-            }
+            let flags = row.regex_flags;
+            let params_str = req.params_json.unwrap_or(row.parameters_json);
+            return Ok(run_regex_transformation(&req.input, &pattern, &replacement, &flags, Some(&params_str), start));
         } else {
             let js_code = row.js_code.ok_or_else(|| "No JS code found".to_string())?;
             let params = req.params_json.unwrap_or(row.parameters_json);
@@ -106,8 +80,78 @@ pub async fn execute_script(
         }
     }
 
-    let js_code = req.js_code.ok_or_else(|| "Neither scriptId nor jsCode provided".to_string())?;
+    if let Some(pattern) = req.regex_pattern {
+        let replacement = req.regex_replacement.unwrap_or_default();
+        let flags = req.regex_flags.unwrap_or_else(|| "g".to_string());
+        return Ok(run_regex_transformation(&req.input, &pattern, &replacement, &flags, req.params_json.as_deref(), start));
+    }
+
+    let js_code = req.js_code.ok_or_else(|| "Neither scriptId, regexPattern nor jsCode provided".to_string())?;
     Ok(run_script_in_sandbox(js_code, req.input, req.params_json).await)
+}
+
+fn substitute_params(text: &str, params_json: Option<&str>) -> String {
+    let mut result = text.to_string();
+    if let Some(pj) = params_json {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(pj) {
+            if let Some(obj) = val.as_object() {
+                for (k, v) in obj {
+                    let placeholder = format!("{{{{{}}}}}", k);
+                    let val_str = match v {
+                        serde_json::Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    };
+                    result = result.replace(&placeholder, &val_str);
+                }
+            }
+        }
+    }
+    result
+}
+
+fn run_regex_transformation(
+    input: &str,
+    pattern: &str,
+    replacement: &str,
+    flags: &str,
+    params_json: Option<&str>,
+    start: std::time::Instant,
+) -> ScriptExecutionResultDto {
+    let sub_pattern = substitute_params(pattern, params_json);
+    let sub_replacement = substitute_params(replacement, params_json);
+
+    let mut builder = regex::RegexBuilder::new(&sub_pattern);
+    if flags.contains('i') {
+        builder.case_insensitive(true);
+    }
+    if flags.contains('m') {
+        builder.multi_line(true);
+    }
+    if flags.contains('s') {
+        builder.dot_matches_new_line(true);
+    }
+
+    match builder.build() {
+        Ok(re) => {
+            let output = re.replace_all(input, sub_replacement.as_str()).to_string();
+            let elapsed = start.elapsed().as_millis() as u32;
+            ScriptExecutionResultDto {
+                output,
+                execution_time_ms: elapsed,
+                console_logs: vec![],
+                error: None,
+            }
+        }
+        Err(e) => {
+            let elapsed = start.elapsed().as_millis() as u32;
+            ScriptExecutionResultDto {
+                output: input.to_string(),
+                execution_time_ms: elapsed,
+                console_logs: vec![],
+                error: Some(format!("Invalid RegEx pattern: {}", e)),
+            }
+        }
+    }
 }
 
 #[tauri::command]
@@ -247,6 +291,9 @@ pub async fn run_pipeline(
                 ExecuteScriptDto {
                     script_id: Some(script_id),
                     js_code: None,
+                    regex_pattern: None,
+                    regex_replacement: None,
+                    regex_flags: None,
                     input: current_text.clone(),
                     params_json: None,
                 },

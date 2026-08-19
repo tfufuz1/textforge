@@ -50,8 +50,10 @@
 
     async function runTest() {
         if ($activeScriptStore) {
-            const codeToTest = $activeScriptStore.scriptType === 'js' ? editJsCode : undefined;
-            await handleTestScript(testInput, codeToTest);
+            const draft = $activeScriptStore.scriptType === 'js'
+                ? { jsCode: editJsCode }
+                : { regexPattern: editRegexPattern, regexReplacement: editRegexReplacement, regexFlags: editRegexFlags };
+            await handleTestScript(testInput, draft);
         }
     }
 

@@ -5,7 +5,7 @@ import type { UndoEntry } from './undo';
 describe('UndoStack Domain Model', () => {
   const dummyEntry = (desc: string): UndoEntry => ({
     description: desc,
-    performedAt: Date.now(),
+    performedAt: Date.now() as any,
     action: {
       _type: 'snippet_create',
       created: { id: '1', title: 'test', content: 'test content' } as any
