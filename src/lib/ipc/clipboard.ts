@@ -12,6 +12,12 @@ export interface ClipboardEntryListItemDto {
   promotedToSnippetId: string | null;
 }
 
+export interface ClipboardFilterDto {
+  searchQuery?: string | null;
+  contentTypes?: string[];
+  sourceApps?: string[];
+}
+
 export interface PagedResult<T> {
   items: T[];
   total: number;
@@ -22,10 +28,11 @@ export interface PagedResult<T> {
 }
 
 export async function listClipboardHistory(
+    filter?: ClipboardFilterDto,
     page = 0,
     pageSize = 50
 ): Promise<PagedResult<ClipboardEntryListItemDto>> {
-    return invoke('list_clipboard_history', { page, page_size: pageSize });
+    return invoke('list_clipboard_history', { filter, page, page_size: pageSize });
 }
 
 export async function pinEntry(id: string, pinned: boolean): Promise<void> {
@@ -52,3 +59,6 @@ export async function readClipboardNow(): Promise<string> {
     return invoke('read_clipboard_now');
 }
 
+export async function writeToClipboard(content: string, snippetId?: string | null): Promise<void> {
+    return invoke('write_to_clipboard', { content, snippet_id: snippetId ?? null });
+}
