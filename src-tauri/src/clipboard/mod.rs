@@ -94,6 +94,8 @@ async fn try_wl_paste_monitor(app_handle: AppHandle, config: &ClipboardMonitorCo
             }
             buffer.clear();
         }
+
+        let _ = child.wait().await;
     });
 
     Ok(())
