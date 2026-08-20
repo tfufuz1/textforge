@@ -2,11 +2,16 @@ import { invoke } from '@tauri-apps/api/core';
 import type { WorkspaceSession } from '../domain/session';
 
 export interface DatabaseStats {
-  snippetsCount: number;
-  clipboardEntriesCount: number;
-  scriptsCount: number;
-  pipelinesCount: number;
-  databaseSizeBytes: number;
+  totalSnippets?: number;
+  totalClipboardEntries?: number;
+  totalScripts?: number;
+  totalPipelines?: number;
+  dbSizeBytes?: number;
+  snippetsCount?: number;
+  clipboardEntriesCount?: number;
+  scriptsCount?: number;
+  pipelinesCount?: number;
+  databaseSizeBytes?: number;
 }
 
 export async function getWorkspaceSession(): Promise<WorkspaceSession> {

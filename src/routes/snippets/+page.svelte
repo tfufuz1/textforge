@@ -3,7 +3,7 @@
     import SnippetList from '../../lib/components/snippets/SnippetList.svelte';
     import SnippetEditor from '../../lib/components/snippets/SnippetEditor.svelte';
     import FilterPanel from '../../lib/components/filter/FilterPanel.svelte';
-    import { loadSnippets, snippetFilterStore, selectedTagStore, tagCloud, activeSnippetStore } from '../../lib/stores/snippets';
+    import { loadSnippets, snippetFilterStore, selectedTagStore, tagCloud, activeSnippetStore, handleEmptyTrash } from '../../lib/stores/snippets';
 
     let searchQuery = $state('');
 
@@ -59,6 +59,19 @@
             >
                 🗑️ {$snippetFilterStore.isTrashed ? 'Papierkorb aktiv' : 'Papierkorb'}
             </button>
+            {#if $snippetFilterStore.isTrashed}
+                <button
+                    onclick={async () => {
+                        if (confirm('Möchtest du den Papierkorb wirklich unwiderruflich leeren?')) {
+                            await handleEmptyTrash();
+                        }
+                    }}
+                    class="px-3 py-2 text-xs font-semibold bg-rose-900 hover:bg-rose-800 text-rose-100 rounded-xl transition-all border border-rose-700 shrink-0"
+                    title="Papierkorb leeren"
+                >
+                    🧹 Papierkorb leeren
+                </button>
+            {/if}
             <button 
                 onclick={createNewSnippet}
                 class="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-600/20 transition-all shrink-0 flex items-center space-x-1.5"
