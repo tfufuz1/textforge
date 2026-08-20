@@ -415,5 +415,13 @@ mod tests {
         assert_eq!(format_fts5_query("  foo \"bar\"  "), "\"foo \"\"bar\"\"\"");
         assert_eq!(format_fts5_query("   "), "");
     }
+
+    #[test]
+    fn test_clipboard_filter_dto_default() {
+        let filter = ClipboardFilterDto::default();
+        assert!(filter.search_query.is_none());
+        assert!(filter.content_types.is_empty());
+        assert!(filter.source_apps.is_empty());
+    }
 }
 
