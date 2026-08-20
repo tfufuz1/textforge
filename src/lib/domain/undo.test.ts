@@ -68,4 +68,37 @@ describe('UndoStack Domain Model', () => {
     expect(stack.undoable.length).toBe(2);
     expect(stack.redoable.length).toBe(0);
   });
+
+  it('handles bulk_operation actions properly', () => {
+    let stack = UndoStack.empty(5);
+    const bulkEntry: UndoEntry = {
+      description: 'Bulk update 2 items',
+      performedAt: Date.now() as any,
+      action: {
+        _type: 'bulk_operation',
+        operations: [
+          {
+            _type: 'snippet_update',
+            before: { id: '1', title: 'old 1', content: 'c1' } as any,
+            after: { id: '1', title: 'new 1', content: 'c1' } as any,
+          },
+          {
+            _type: 'snippet_update',
+            before: { id: '2', title: 'old 2', content: 'c2' } as any,
+            after: { id: '2', title: 'new 2', content: 'c2' } as any,
+          },
+        ],
+      },
+    };
+
+    stack = UndoStack.push(stack, bulkEntry);
+    expect(stack.undoable.length).toBe(1);
+    expect(stack.undoable[0].action._type).toBe('bulk_operation');
+
+    const res = UndoStack.undo(stack);
+    expect(res._tag).toBe('Ok');
+    if (res._tag === 'Ok') {
+      expect(res.value.entry.description).toBe('Bulk update 2 items');
+    }
+  });
 });

@@ -93,6 +93,7 @@ async fn main() {
             commands::undo::undo,
             commands::undo::redo,
             commands::undo::get_undo_state,
+            commands::undo::push_undo_entry,
 
             // STATUS: Implemented (Phase 3 - JavaScript Sandbox & Pipeline Transformation IPC Commands)
             commands::transform::execute_script,

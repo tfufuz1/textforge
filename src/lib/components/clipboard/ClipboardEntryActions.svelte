@@ -27,12 +27,8 @@
     }
 
     async function handlePromote() {
-        const snippetId = await promoteToSnippet(entry.id, null, { _type: 'inbox', folderId: null });
+        await promoteToSnippet(entry.id, null, { _type: 'inbox', folderId: null });
         await loadClipboardHistory();
-        pushUndoAction({
-            _type: 'snippet_create',
-            created: { id: snippetId } as any
-        }, "Snippet aus Zwischenablage erstellt");
         pushNotification(Notifications.snippetSaved("Clipboard-Import"));
         pushNotification(Notifications.undoAvailable("Snippet aus Zwischenablage erstellt"));
     }

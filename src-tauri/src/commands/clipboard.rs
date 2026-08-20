@@ -251,6 +251,24 @@ pub async fn promote_clipboard_to_snippet(
 
     tx.commit().await.map_err(|e| e.to_string())?;
 
+    let undo_entry = crate::commands::undo::UndoEntryDto {
+        id: uuid::Uuid::new_v4().to_string(),
+        performed_at: now,
+        description: format!("Snippet '{}' aus Zwischenablage erstellt", final_title),
+        action: crate::commands::undo::UndoActionDto::SnippetCreate {
+            created: serde_json::json!({
+                "id": snippet_id,
+                "title": final_title,
+                "content": clip.content,
+                "contentType": clip.content_type,
+            }),
+        },
+    };
+
+    if let Ok(mut stack) = state.undo_stack.lock() {
+        stack.push(undo_entry);
+    }
+
     Ok(snippet_id)
 }
 #[tauri::command]

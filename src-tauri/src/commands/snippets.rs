@@ -470,10 +470,10 @@ pub async fn create_snippet(
 
     tx.commit().await.map_err(|e| e.to_string())?;
 
-    Ok(SnippetDto {
-        id,
-        title: draft.title,
-        content: draft.content,
+    let created_snippet = SnippetDto {
+        id: id.clone(),
+        title: draft.title.clone(),
+        content: draft.content.clone(),
         content_type,
         source_app: None,
         location_type: location_type.to_string(),
@@ -487,7 +487,22 @@ pub async fn create_snippet(
         is_favorite: false,
         color: None,
         tags,
-    })
+    };
+
+    let undo_entry = crate::commands::undo::UndoEntryDto {
+        id: uuid::Uuid::new_v4().to_string(),
+        performed_at: now,
+        description: format!("Snippet '{}' erstellt", draft.title),
+        action: crate::commands::undo::UndoActionDto::SnippetCreate {
+            created: serde_json::to_value(&created_snippet).unwrap_or_default(),
+        },
+    };
+
+    if let Ok(mut stack) = state.undo_stack.lock() {
+        stack.push(undo_entry);
+    }
+
+    Ok(created_snippet)
 }
 
 #[tauri::command]
@@ -496,6 +511,7 @@ pub async fn update_snippet(
     draft: UpdateSnippetDto,
     state: State<'_, AppState>,
 ) -> Result<SnippetDto, String> {
+    let before_snippet = get_snippet(id.clone(), state.clone()).await.ok();
     let now = chrono::Utc::now().timestamp_millis();
     let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
 
@@ -534,7 +550,25 @@ pub async fn update_snippet(
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;
-    get_snippet(id, state).await
+    let updated = get_snippet(id, state.clone()).await?;
+
+    if let Some(before) = before_snippet {
+        let undo_entry = crate::commands::undo::UndoEntryDto {
+            id: uuid::Uuid::new_v4().to_string(),
+            performed_at: now,
+            description: format!("Snippet '{}' aktualisiert", updated.title),
+            action: crate::commands::undo::UndoActionDto::SnippetUpdate {
+                before: serde_json::to_value(&before).unwrap_or_default(),
+                after: serde_json::to_value(&updated).unwrap_or_default(),
+            },
+        };
+
+        if let Ok(mut stack) = state.undo_stack.lock() {
+            stack.push(undo_entry);
+        }
+    }
+
+    Ok(updated)
 }
 
 #[tauri::command]
