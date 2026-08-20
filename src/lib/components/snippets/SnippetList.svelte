@@ -66,6 +66,32 @@
             removeTags: []
         });
     }
+
+    async function applyBulkTransform() {
+        const snippetIds = Array.from($selectedSnippetIdsStore);
+        if (snippetIds.length === 0) return;
+        const pipelineId = prompt("Pipeline-ID eingeben:");
+        if (!pipelineId || !pipelineId.trim()) return;
+        await handleBulkOperation({
+            _type: 'bulk_transform',
+            snippetIds,
+            pipelineId: pipelineId.trim(),
+            saveResults: true
+        });
+    }
+
+    async function applyBulkExport() {
+        const snippetIds = Array.from($selectedSnippetIdsStore);
+        if (snippetIds.length === 0) return;
+        const outputPath = prompt("Zielpfad für Export eingeben:", "bulk_export.json");
+        if (!outputPath || !outputPath.trim()) return;
+        await handleBulkOperation({
+            _type: 'bulk_export',
+            snippetIds,
+            format: 'json',
+            outputPath: outputPath.trim()
+        });
+    }
 </script>
 
 <div class="flex flex-col h-full space-y-2 overflow-hidden">
@@ -107,6 +133,20 @@
                         title="Tag hinzufügen"
                     >
                         🏷️
+                    </button>
+                    <button
+                        onclick={applyBulkTransform}
+                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
+                        title="Pipeline anwenden (Bulk Transform)"
+                    >
+                        ⚡
+                    </button>
+                    <button
+                        onclick={applyBulkExport}
+                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
+                        title="Ausgewählte exportieren (Bulk Export)"
+                    >
+                        📥
                     </button>
                     <button
                         onclick={applyBulkDelete}
