@@ -10,14 +10,13 @@ async fn test_clipboard_operations() {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().timestamp_millis();
     sqlx::query(
-        "INSERT INTO clipboard_history (id, content, content_hash, content_type, captured_at, size_bytes) VALUES (?, ?, ?, ?, ?, ?)"
+        "INSERT INTO clipboard_history (id, content, content_hash, content_type, captured_at) VALUES (?, ?, ?, ?, ?)"
     )
     .bind(&id)
     .bind("Hello TextForge Clipboard")
     .bind("hash123")
     .bind("plain_text")
     .bind(now)
-    .bind(25)
     .execute(&db)
     .await
     .unwrap();
