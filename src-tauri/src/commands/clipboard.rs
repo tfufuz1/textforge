@@ -17,6 +17,7 @@ pub struct ClipboardFilterDto {
     pub search_query: Option<String>,
     pub content_types: Vec<String>,
     pub source_apps: Vec<String>,
+    pub is_pinned: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -87,6 +88,11 @@ pub async fn list_clipboard_history(
         separated.push_unseparated(")");
     }
 
+    if let Some(pinned) = filter.is_pinned {
+        query.push(" AND is_pinned = ");
+        query.push_bind(if pinned { 1 } else { 0 });
+    }
+
     query.push(" ORDER BY captured_at DESC LIMIT ");
     query.push_bind(page_size);
     query.push(" OFFSET ");
@@ -134,6 +140,11 @@ pub async fn list_clipboard_history(
             separated.push_bind(sa.clone());
         }
         separated.push_unseparated(")");
+    }
+
+    if let Some(pinned) = filter.is_pinned {
+        count_query.push(" AND is_pinned = ");
+        count_query.push_bind(if pinned { 1 } else { 0 });
     }
 
     let total: i64 = count_query
