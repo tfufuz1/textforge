@@ -193,7 +193,11 @@ pub struct DiffResultDto {
 pub struct ScriptVersionDto {
     pub id: String,
     pub script_id: String,
-    pub js_code: String,
+    pub version: u32,
+    pub js_code: Option<String>,
+    pub regex_pattern: Option<String>,
+    pub regex_replacement: Option<String>,
+    pub regex_flags: String,
     pub change_note: Option<String>,
     pub created_at: i64,
 }
@@ -1282,18 +1286,28 @@ pub async fn save_script_version(
 
     #[derive(sqlx::FromRow)]
     struct ScriptRow {
-        js_code: String,
+        js_code: Option<String>,
+        regex_pattern: Option<String>,
+        regex_replacement: Option<String>,
+        regex_flags: String,
+        current_version: i64,
     }
 
-    let script = sqlx::query_as::<_, ScriptRow>("SELECT js_code FROM scripts WHERE id = ?")
+    let script = sqlx::query_as::<_, ScriptRow>("SELECT js_code, regex_pattern, regex_replacement, regex_flags, current_version FROM scripts WHERE id = ?")
         .bind(&script_id)
         .fetch_optional(&state.db)
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Script not found".to_string())?;
 
-    sqlx::query("INSERT INTO script_versions (id, script_id, js_code, change_note, created_at) VALUES (?, ?, ?, ?, ?)")
-        .bind(&version_id).bind(&script_id).bind(&script.js_code).bind(&change_note).bind(now)
+    let new_ver = script.current_version + 1;
+
+    sqlx::query("INSERT INTO script_versions (id, script_id, version, js_code, regex_pattern, regex_replacement, regex_flags, change_note, saved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(&version_id).bind(&script_id).bind(new_ver).bind(&script.js_code).bind(&script.regex_pattern).bind(&script.regex_replacement).bind(&script.regex_flags).bind(&change_note).bind(now)
+        .execute(&state.db).await.map_err(|e| e.to_string())?;
+
+    sqlx::query("UPDATE scripts SET current_version = ? WHERE id = ?")
+        .bind(new_ver).bind(&script_id)
         .execute(&state.db).await.map_err(|e| e.to_string())?;
 
     Ok(version_id)
@@ -1308,12 +1322,16 @@ pub async fn list_script_versions(
     struct Row {
         id: String,
         script_id: String,
-        js_code: String,
+        version: i64,
+        js_code: Option<String>,
+        regex_pattern: Option<String>,
+        regex_replacement: Option<String>,
+        regex_flags: String,
         change_note: Option<String>,
-        created_at: i64,
+        saved_at: i64,
     }
 
-    let rows = sqlx::query_as::<_, Row>("SELECT id, script_id, js_code, change_note, created_at FROM script_versions WHERE script_id = ? ORDER BY created_at DESC")
+    let rows = sqlx::query_as::<_, Row>("SELECT id, script_id, version, js_code, regex_pattern, regex_replacement, regex_flags, change_note, saved_at FROM script_versions WHERE script_id = ? ORDER BY version DESC")
         .bind(&script_id)
         .fetch_all(&state.db)
         .await
@@ -1322,9 +1340,13 @@ pub async fn list_script_versions(
     Ok(rows.into_iter().map(|r| ScriptVersionDto {
         id: r.id,
         script_id: r.script_id,
+        version: r.version as u32,
         js_code: r.js_code,
+        regex_pattern: r.regex_pattern,
+        regex_replacement: r.regex_replacement,
+        regex_flags: r.regex_flags,
         change_note: r.change_note,
-        created_at: r.created_at,
+        created_at: r.saved_at,
     }).collect())
 }
 
@@ -1336,19 +1358,22 @@ pub async fn restore_script_version(
 ) -> Result<(), String> {
     #[derive(sqlx::FromRow)]
     struct VerRow {
-        js_code: String,
+        js_code: Option<String>,
+        regex_pattern: Option<String>,
+        regex_replacement: Option<String>,
+        regex_flags: String,
     }
 
-    let ver = sqlx::query_as::<_, VerRow>("SELECT js_code FROM script_versions WHERE id = ? AND script_id = ?")
-        .bind(&version_id).bind(&script_id)
+    let ver = sqlx::query_as::<_, VerRow>("SELECT js_code, regex_pattern, regex_replacement, regex_flags FROM script_versions WHERE (id = ? OR CAST(version AS TEXT) = ?) AND script_id = ?")
+        .bind(&version_id).bind(&version_id).bind(&script_id)
         .fetch_optional(&state.db)
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Script version not found".to_string())?;
 
     let now = chrono::Utc::now().timestamp_millis();
-    sqlx::query("UPDATE scripts SET js_code = ?, updated_at = ? WHERE id = ?")
-        .bind(&ver.js_code).bind(now).bind(&script_id)
+    sqlx::query("UPDATE scripts SET js_code = ?, regex_pattern = ?, regex_replacement = ?, regex_flags = ?, updated_at = ? WHERE id = ?")
+        .bind(&ver.js_code).bind(&ver.regex_pattern).bind(&ver.regex_replacement).bind(&ver.regex_flags).bind(now).bind(&script_id)
         .execute(&state.db).await.map_err(|e| e.to_string())?;
 
     Ok(())

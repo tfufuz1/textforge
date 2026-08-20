@@ -260,9 +260,13 @@ fn run_script_sync(
         let logs = console_logs.borrow().clone();
         match eval_res {
             Ok(mut res) => {
-                // Enforce output size limit
+                // Enforce output size limit safely at UTF-8 char boundary
                 if res.len() > MAX_OUTPUT_BYTES {
-                    res.truncate(MAX_OUTPUT_BYTES);
+                    let mut end = MAX_OUTPUT_BYTES;
+                    while !res.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    res.truncate(end);
                 }
                 (Ok(res), logs)
             }
