@@ -101,4 +101,32 @@ describe('UndoStack Domain Model', () => {
       expect(res.value.entry.description).toBe('Bulk update 2 items');
     }
   });
+
+  it('handles snippet creation from clipboard entry promotion', () => {
+    let stack = UndoStack.empty(5);
+    const promoteEntry: UndoEntry = {
+      description: "Snippet 'Clipboard-Import' aus Zwischenablage erstellt",
+      performedAt: Date.now() as any,
+      action: {
+        _type: 'snippet_create',
+        created: {
+          id: 'snip-100',
+          title: 'Clipboard-Import',
+          content: 'Hello World Clipboard Content',
+          contentType: 'plain_text',
+        } as any,
+      },
+    };
+
+    stack = UndoStack.push(stack, promoteEntry);
+    expect(stack.undoable.length).toBe(1);
+    expect(stack.undoable[0].description).toContain('Zwischenablage');
+
+    const res = UndoStack.undo(stack);
+    expect(res._tag).toBe('Ok');
+    if (res._tag === 'Ok') {
+      expect(res.value.entry.action._type).toBe('snippet_create');
+      expect((res.value.entry.action as any).created.id).toBe('snip-100');
+    }
+  });
 });
