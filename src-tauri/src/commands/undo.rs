@@ -122,6 +122,7 @@ async fn execute_action_recursive(action: &UndoActionDto, is_undo: bool, tx: &mu
             let id = created.get("id").and_then(|v| v.as_str()).unwrap_or_default();
             if is_undo {
                 sqlx::query("DELETE FROM snippets WHERE id = ?").bind(id).execute(&mut **tx).await.map_err(|e| e.to_string())?;
+                sqlx::query("UPDATE clipboard_history SET promoted_to_snippet_id = NULL WHERE promoted_to_snippet_id = ?").bind(id).execute(&mut **tx).await.ok();
             } else {
                 let title = created.get("title").and_then(|v| v.as_str()).unwrap_or_default();
                 let content = created.get("content").and_then(|v| v.as_str()).unwrap_or_default();
