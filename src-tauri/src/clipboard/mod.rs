@@ -33,7 +33,15 @@ pub enum MonitorError {
 pub async fn start_monitor(
     app_handle: AppHandle,
 ) -> Result<(), MonitorError> {
-    match try_wl_paste_monitor(app_handle.clone()).await {
+    let config = ClipboardMonitorConfig::default();
+    start_monitor_with_config(app_handle, config).await
+}
+
+pub async fn start_monitor_with_config(
+    app_handle: AppHandle,
+    config: ClipboardMonitorConfig,
+) -> Result<(), MonitorError> {
+    match try_wl_paste_monitor(app_handle.clone(), &config).await {
         Ok(()) => {
             eprintln!("Clipboard monitor: using wl-paste --watch");
             Ok(())
@@ -43,16 +51,22 @@ pub async fn start_monitor(
                 "wl-paste monitor failed ({:?}), falling back to arboard polling (500ms)",
                 e
             );
-            start_arboard_polling(app_handle).await
+            start_arboard_polling(app_handle, config).await
         }
     }
 }
 
 /// Primary monitor: uses `wl-paste --watch` for event-driven clipboard monitoring.
-async fn try_wl_paste_monitor(app_handle: AppHandle) -> Result<(), MonitorError> {
+/// Uses `wl-paste --watch wl-paste --no-newline` to fetch the full snapshot on clipboard change.
+async fn try_wl_paste_monitor(app_handle: AppHandle, config: &ClipboardMonitorConfig) -> Result<(), MonitorError> {
+    let min_length = config.min_content_length;
+    let max_entries = config.max_entries;
+
     let mut child = tokio::process::Command::new("wl-paste")
         .arg("--watch")
-        .arg("--no-newline")
+        .arg("sh")
+        .arg("-c")
+        .arg("wl-paste --no-newline && printf '\\0'")
         .stdout(Stdio::piped())
         .spawn()
         .map_err(|e| MonitorError::WaylandSubprocessFailed(e.to_string()))?;
@@ -63,14 +77,22 @@ async fn try_wl_paste_monitor(app_handle: AppHandle) -> Result<(), MonitorError>
         .ok_or(MonitorError::WaylandSubprocessFailed("No stdout".into()))?;
 
     tokio::spawn(async move {
-        let reader = BufReader::new(stdout);
-        let mut lines = reader.lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            let content = line;
-            if content.len() < 3 {
-                continue;
+        let mut reader = BufReader::new(stdout);
+        let mut buffer = Vec::new();
+
+        while let Ok(n) = reader.read_until(0, &mut buffer).await {
+            if n == 0 {
+                break;
             }
-            insert_clipboard_entry(&app_handle, &content).await;
+            if buffer.ends_with(&[0]) {
+                buffer.pop();
+            }
+            if let Ok(content) = String::from_utf8(buffer.clone()) {
+                if content.len() >= min_length {
+                    insert_clipboard_entry_with_config(&app_handle, &content, min_length, max_entries).await;
+                }
+            }
+            buffer.clear();
         }
     });
 
@@ -79,7 +101,7 @@ async fn try_wl_paste_monitor(app_handle: AppHandle) -> Result<(), MonitorError>
 
 /// Fallback monitor: polls `arboard::Clipboard` every 500ms.
 /// Used when wl-paste is not available (e.g. X11, missing wl-clipboard package).
-async fn start_arboard_polling(app_handle: AppHandle) -> Result<(), MonitorError> {
+async fn start_arboard_polling(app_handle: AppHandle, config: ClipboardMonitorConfig) -> Result<(), MonitorError> {
     // Verify that arboard can open the clipboard at all before spawning the loop
     let _test_clipboard = arboard::Clipboard::new()
         .map_err(|e| MonitorError::FallbackPollingError(format!("Cannot open clipboard: {}", e)))?;
@@ -94,6 +116,8 @@ async fn start_arboard_polling(app_handle: AppHandle) -> Result<(), MonitorError
         };
 
         let mut last_text = String::new();
+        let min_length = config.min_content_length;
+        let max_entries = config.max_entries;
 
         loop {
             std::thread::sleep(std::time::Duration::from_millis(500));
@@ -103,7 +127,7 @@ async fn start_arboard_polling(app_handle: AppHandle) -> Result<(), MonitorError
                 Err(_) => continue,
             };
 
-            if current == last_text || current.len() < 3 {
+            if current == last_text || current.len() < min_length {
                 continue;
             }
 
@@ -113,7 +137,7 @@ async fn start_arboard_polling(app_handle: AppHandle) -> Result<(), MonitorError
             let handle = app_handle.clone();
             let text = current;
             tauri::async_runtime::spawn(async move {
-                insert_clipboard_entry(&handle, &text).await;
+                insert_clipboard_entry_with_config(&handle, &text, min_length, max_entries).await;
             });
         }
     });
@@ -121,8 +145,21 @@ async fn start_arboard_polling(app_handle: AppHandle) -> Result<(), MonitorError
     Ok(())
 }
 
+pub async fn insert_clipboard_entry(app_handle: &AppHandle, content: &str) {
+    insert_clipboard_entry_with_config(app_handle, content, 3, 500).await;
+}
+
 /// Shared insertion logic used by both wl-paste and arboard monitors.
-async fn insert_clipboard_entry(app_handle: &AppHandle, content: &str) {
+pub async fn insert_clipboard_entry_with_config(
+    app_handle: &AppHandle,
+    content: &str,
+    min_length: usize,
+    max_entries: u32,
+) {
+    if content.len() < min_length {
+        return;
+    }
+
     use sha2::{Digest, Sha256};
 
     let mut hasher = Sha256::new();
@@ -175,15 +212,16 @@ async fn insert_clipboard_entry(app_handle: &AppHandle, content: &str) {
             if res.is_ok() {
                 app_handle.emit("clipboard:new_entry", &id).ok();
 
-                // Delete unpinned items if history > 500
+                // Delete unpinned items if history > max_entries
                 let count_res: Result<(i64,), _> =
                     sqlx::query_as("SELECT COUNT(*) FROM clipboard_history")
                         .fetch_one(pool)
                         .await;
                 if let Ok(count) = count_res {
-                    if count.0 > 500 {
-                        sqlx::query("DELETE FROM clipboard_history WHERE is_pinned = 0 ORDER BY captured_at ASC LIMIT ?")
-                            .bind(count.0 - 500)
+                    if count.0 > max_entries as i64 {
+                        let to_delete = count.0 - max_entries as i64;
+                        sqlx::query("DELETE FROM clipboard_history WHERE id IN (SELECT id FROM clipboard_history WHERE is_pinned = 0 ORDER BY captured_at ASC LIMIT ?)")
+                            .bind(to_delete)
                             .execute(pool)
                             .await
                             .ok();

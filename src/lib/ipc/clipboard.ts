@@ -16,6 +16,7 @@ export interface ClipboardFilterDto {
   searchQuery?: string | null;
   contentTypes?: string[];
   sourceApps?: string[];
+  isPinned?: boolean | null;
 }
 
 export interface PagedResult<T> {

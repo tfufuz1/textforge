@@ -4,6 +4,7 @@
 
     let searchQuery = $state('');
     let selectedContentType = $state('');
+    let isPinnedOnly = $state(false);
 
     const contentTypes = [
         { value: '', label: 'Alle Typen' },
@@ -19,20 +20,23 @@
         clipboardFilterStore.update(f => ({
             ...f,
             searchQuery: searchQuery.trim() ? Option.some(searchQuery.trim()) : Option.none(),
-            contentTypes: selectedContentType ? [selectedContentType] : []
+            contentTypes: selectedContentType ? [selectedContentType] : [],
+            isPinned: isPinnedOnly ? Option.some(true) : Option.none()
         }));
-        await loadClipboardHistory();
+        await loadClipboardHistory(0);
     }
 
     async function resetFilters() {
         searchQuery = '';
         selectedContentType = '';
+        isPinnedOnly = false;
         clipboardFilterStore.set({
             searchQuery: Option.none(),
             contentTypes: [],
-            sourceApps: []
+            sourceApps: [],
+            isPinned: Option.none()
         });
-        await loadClipboardHistory();
+        await loadClipboardHistory(0);
     }
 </script>
 
@@ -58,7 +62,15 @@
         {/each}
     </select>
 
-    {#if searchQuery || selectedContentType}
+    <button
+        onclick={() => { isPinnedOnly = !isPinnedOnly; applyFilters(); }}
+        class="px-3 py-2 text-xs font-medium rounded-xl border transition-all flex items-center gap-1.5 {isPinnedOnly ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-slate-950/80 text-slate-400 border-slate-800 hover:text-slate-200'}"
+    >
+        <span>📌</span>
+        <span>Nur Pinned</span>
+    </button>
+
+    {#if searchQuery || selectedContentType || isPinnedOnly}
         <button
             onclick={resetFilters}
             class="px-3 py-2 text-xs font-medium bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/60 rounded-xl transition-all"
@@ -67,4 +79,3 @@
         </button>
     {/if}
 </div>
-
