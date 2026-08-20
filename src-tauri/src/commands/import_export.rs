@@ -172,25 +172,50 @@ pub async fn import_data(
     request: ImportRequestDto,
     state: State<'_, AppState>,
 ) -> Result<ImportResultDto, String> {
-    let file = File::open(&request.source_path).map_err(|e| e.to_string())?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
-    
-    // Parse manifest & checksums if present
-    let mut checksum_map: HashMap<String, String> = HashMap::new();
-    if let Ok(mut manifest_file) = archive.by_name("manifest.json") {
-        let mut manifest_contents = String::new();
-        if manifest_file.read_to_string(&mut manifest_contents).is_ok() {
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&manifest_contents) {
-                if let Some(c_obj) = val.get("checksums").and_then(|v| v.as_object()) {
-                    for (k, v) in c_obj {
-                        if let Some(chk) = v.as_str() {
-                            checksum_map.insert(k.clone(), chk.to_string());
+    struct ExtractedEntry {
+        name: String,
+        raw_bytes: Vec<u8>,
+    }
+
+    let source_path = request.source_path.clone();
+
+    // Perform all synchronous ZIP archive reading first
+    let (entries, checksum_map) = tokio::task::spawn_blocking(move || -> Result<(Vec<ExtractedEntry>, HashMap<String, String>), String> {
+        let file = File::open(&source_path).map_err(|e| e.to_string())?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+
+        let mut checksum_map: HashMap<String, String> = HashMap::new();
+        if let Ok(mut manifest_file) = archive.by_name("manifest.json") {
+            let mut manifest_contents = String::new();
+            if manifest_file.read_to_string(&mut manifest_contents).is_ok() {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&manifest_contents) {
+                    if let Some(c_obj) = val.get("checksums").and_then(|v| v.as_object()) {
+                        for (k, v) in c_obj {
+                            if let Some(chk) = v.as_str() {
+                                checksum_map.insert(k.clone(), chk.to_string());
+                            }
                         }
                     }
                 }
             }
         }
-    }
+
+        let mut entries = Vec::new();
+        for i in 0..archive.len() {
+            let mut zip_file = archive.by_index(i).map_err(|e| e.to_string())?;
+            if zip_file.is_dir() {
+                continue;
+            }
+            let name = zip_file.name().to_string();
+            let mut raw_bytes = Vec::new();
+            zip_file.read_to_end(&mut raw_bytes).map_err(|e| e.to_string())?;
+            entries.push(ExtractedEntry { name, raw_bytes });
+        }
+
+        Ok((entries, checksum_map))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
 
     let policy = request.conflict_policy.as_deref().unwrap_or(
         if request.overwrite.unwrap_or(false) { "overwrite" } else { "skip" }
@@ -205,14 +230,9 @@ pub async fn import_data(
     let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().timestamp_millis();
 
-    for i in 0..archive.len() {
-        let mut zip_file = archive.by_index(i).map_err(|e| e.to_string())?;
-        let name = zip_file.name().to_string();
-        
-        if zip_file.is_dir() { continue; }
-
-        let mut raw_bytes = Vec::new();
-        zip_file.read_to_end(&mut raw_bytes).map_err(|e| e.to_string())?;
+    for entry in entries {
+        let name = entry.name;
+        let raw_bytes = entry.raw_bytes;
 
         // Checksum validation if present in manifest
         if let Some(expected_chk) = checksum_map.get(&name) {
@@ -322,7 +342,7 @@ pub async fn import_data(
             }
         }
     }
-    
+
     tx.commit().await.map_err(|e| e.to_string())?;
 
     Ok(ImportResultDto {
