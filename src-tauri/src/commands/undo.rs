@@ -89,6 +89,16 @@ impl UndoStack {
 
 pub type SharedUndoStack = Mutex<UndoStack>;
 
+#[tauri::command]
+pub async fn push_undo_entry(
+    entry: UndoEntryDto,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut stack = state.undo_stack.lock().map_err(|e| e.to_string())?;
+    stack.push(entry);
+    Ok(())
+}
+
 // Helper for applying actions to the DB
 async fn apply_action(action: &UndoActionDto, is_undo: bool, db: &sqlx::SqlitePool) -> Result<(), String> {
     let mut tx = db.begin().await.map_err(|e| e.to_string())?;

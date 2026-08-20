@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { undo as ipcUndo, redo as ipcRedo, getUndoState as ipcGetUndoState } from '../ipc/undo';
+import { undo as ipcUndo, redo as ipcRedo, getUndoState as ipcGetUndoState, pushUndoEntry as ipcPushUndoEntry } from '../ipc/undo';
 import type { UndoStateDto } from '../ipc/undo';
 
 export const undoStateStore = writable<UndoStateDto>({
@@ -50,6 +50,14 @@ export async function performRedo(): Promise<boolean> {
   }
 }
 
-export function pushUndoAction(_action: any, _description?: string) {
-  refreshUndoState();
+export async function pushUndoAction(action: any, description: string = 'Aktion durchgeführt') {
+  try {
+    await ipcPushUndoEntry({
+      description,
+      action,
+    });
+    await refreshUndoState();
+  } catch (e) {
+    console.error('Failed to push undo action:', e);
+  }
 }
