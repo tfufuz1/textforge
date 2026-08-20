@@ -7,6 +7,9 @@ use std::time::Duration;
 /// Maximum execution time for user scripts (§ 22 SETTINGS_SCHEMA default).
 const SCRIPT_TIMEOUT: Duration = Duration::from_secs(3);
 
+/// Maximum input size (2 MB as per spec).
+const MAX_INPUT_BYTES: usize = 2 * 1024 * 1024;
+
 /// Maximum output size (512 KB as per spec).
 const MAX_OUTPUT_BYTES: usize = 512 * 1024;
 
@@ -30,6 +33,20 @@ pub async fn run_script_in_sandbox(
     params_json: Option<String>,
 ) -> ScriptExecutionResultDto {
     let start = std::time::Instant::now();
+
+    if input_text.len() > MAX_INPUT_BYTES {
+        return ScriptExecutionResultDto {
+            output: input_text.clone(),
+            execution_time_ms: 0,
+            console_logs: vec![],
+            error: Some(format!(
+                "Input size ({} bytes) exceeds maximum limit ({} bytes)",
+                input_text.len(),
+                MAX_INPUT_BYTES
+            )),
+        };
+    }
+
     let input_text_fallback = input_text.clone();
 
     let result = tokio::time::timeout(
@@ -263,7 +280,7 @@ fn run_script_sync(
                 // Enforce output size limit safely at UTF-8 char boundary
                 if res.len() > MAX_OUTPUT_BYTES {
                     let mut end = MAX_OUTPUT_BYTES;
-                    while !res.is_char_boundary(end) {
+                    while end > 0 && !res.is_char_boundary(end) {
                         end -= 1;
                     }
                     res.truncate(end);

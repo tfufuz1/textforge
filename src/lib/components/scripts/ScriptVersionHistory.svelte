@@ -32,10 +32,11 @@
         }
     }
 
-    async function handleRestore(version: number) {
+    async function handleRestore(v: ScriptVersion) {
         try {
-            await restoreScriptVersion(scriptId, version);
-            pushNotification({ id: crypto.randomUUID(), severity: 'success', title: 'Version wiederhergestellt', message: Option.some(`Version ${version} wurde wiederhergestellt.`), duration: 2000, action: Option.none(), createdAt: Date.now() as any });
+            const verId = v.id || String(v.version);
+            await restoreScriptVersion(scriptId, verId);
+            pushNotification({ id: crypto.randomUUID(), severity: 'success', title: 'Version wiederhergestellt', message: Option.some(`Version ${v.version} wurde wiederhergestellt.`), duration: 2000, action: Option.none(), createdAt: Date.now() as any });
             onRestore();
         } catch (e) {
             console.error('Failed to restore version:', e);
@@ -130,7 +131,7 @@
 
                             <div class="flex justify-end">
                                 <button
-                                    onclick={() => handleRestore(v.version)}
+                                    onclick={() => handleRestore(v)}
                                     class="px-3 py-1.5 text-[11px] font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-all shadow-sm"
                                 >
                                     Wiederherstellen

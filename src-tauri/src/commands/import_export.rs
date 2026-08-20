@@ -63,8 +63,72 @@ pub async fn export_data(
     request: ExportRequestDto,
     state: State<'_, AppState>,
 ) -> Result<ExportResultDto, String> {
-    if request.format != "tfbundle" {
-        return Err("Only tfbundle export format is supported".to_string());
+    let fmt = request.format.to_lowercase();
+
+    if fmt == "json" || fmt == "json_array" {
+        #[derive(Serialize, sqlx::FromRow)]
+        struct SnippetExport { id: String, title: String, content: String, content_type: String, is_pinned: i64, is_favorite: i64 }
+        let snippets = sqlx::query_as::<_, SnippetExport>("SELECT id, title, content, content_type, is_pinned, is_favorite FROM snippets")
+            .fetch_all(&state.db).await.map_err(|e| e.to_string())?;
+
+        let json = serde_json::to_string_pretty(&snippets).map_err(|e| e.to_string())?;
+        std::fs::write(&request.target_path, json).map_err(|e| e.to_string())?;
+
+        return Ok(ExportResultDto {
+            success: true,
+            exported_count: snippets.len() as u32,
+            file_path: request.target_path,
+        });
+    }
+
+    if fmt == "text" || fmt == "markdown" {
+        #[derive(Serialize, sqlx::FromRow)]
+        struct SnippetExport { title: String, content: String }
+        let snippets = sqlx::query_as::<_, SnippetExport>("SELECT title, content FROM snippets")
+            .fetch_all(&state.db).await.map_err(|e| e.to_string())?;
+
+        let combined = snippets
+            .iter()
+            .map(|s| format!("# {}\n\n{}", s.title, s.content))
+            .collect::<Vec<_>>()
+            .join("\n\n---\n\n");
+
+        std::fs::write(&request.target_path, combined).map_err(|e| e.to_string())?;
+
+        return Ok(ExportResultDto {
+            success: true,
+            exported_count: snippets.len() as u32,
+            file_path: request.target_path,
+        });
+    }
+
+    if fmt == "csv" {
+        #[derive(Serialize, sqlx::FromRow)]
+        struct SnippetExport { id: String, title: String, content_type: String, content: String }
+        let snippets = sqlx::query_as::<_, SnippetExport>("SELECT id, title, content_type, content FROM snippets")
+            .fetch_all(&state.db).await.map_err(|e| e.to_string())?;
+
+        let mut csv = String::from("id,title,content_type,content\n");
+        for s in &snippets {
+            let safe_title = s.title.replace('"', "\"\"");
+            let safe_content = s.content.replace('"', "\"\"");
+            csv.push_str(&format!(
+                "\"{}\",\"{}\",\"{}\",\"{}\"\n",
+                s.id, safe_title, s.content_type, safe_content
+            ));
+        }
+
+        std::fs::write(&request.target_path, csv).map_err(|e| e.to_string())?;
+
+        return Ok(ExportResultDto {
+            success: true,
+            exported_count: snippets.len() as u32,
+            file_path: request.target_path,
+        });
+    }
+
+    if fmt != "bundle" && fmt != "tfbundle" {
+        return Err(format!("Unsupported export format: {}", request.format));
     }
 
     let file = File::create(&request.target_path).map_err(|e| e.to_string())?;
