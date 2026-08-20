@@ -34,7 +34,7 @@
 
     async function handleRestore(v: ScriptVersion) {
         try {
-            const verId = v.id || String(v.version);
+            const verId = v.id ? v.id : String(v.version);
             await restoreScriptVersion(scriptId, verId);
             pushNotification({ id: crypto.randomUUID(), severity: 'success', title: 'Version wiederhergestellt', message: Option.some(`Version ${v.version} wurde wiederhergestellt.`), duration: 2000, action: Option.none(), createdAt: Date.now() as any });
             onRestore();
