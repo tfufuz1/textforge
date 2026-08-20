@@ -71,6 +71,6 @@ export async function saveScriptVersion(scriptId: string, changeNote = ''): Prom
   return invoke('save_script_version', { scriptId, changeNote });
 }
 
-export async function restoreScriptVersion(scriptId: string, version: number): Promise<void> {
-  return invoke('restore_script_version', { scriptId, version });
+export async function restoreScriptVersion(scriptId: string, versionId: string | number): Promise<void> {
+  return invoke('restore_script_version', { scriptId, versionId: String(versionId) });
 }
