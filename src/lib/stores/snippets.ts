@@ -12,6 +12,7 @@ import {
     type CreateSnippetDto,
     type UpdateSnippetDto
 } from '../ipc/snippets';
+import { refreshUndoState } from './undo';
 
 export const snippetsStore = writable<SnippetListItemDto[]>([]);
 export const activeSnippetStore = writable<SnippetDto | null>(null);
@@ -76,6 +77,7 @@ export async function handleCreateSnippet(draft: CreateSnippetDto): Promise<Snip
         const created = await createSnippet(draft);
         await loadSnippets();
         activeSnippetStore.set(created);
+        await refreshUndoState();
         return created;
     } catch (e) {
         console.error("Failed to create snippet:", e);
@@ -88,6 +90,7 @@ export async function handleUpdateSnippet(id: string, draft: UpdateSnippetDto) {
         const updated = await updateSnippet(id, draft);
         await loadSnippets();
         activeSnippetStore.set(updated);
+        await refreshUndoState();
     } catch (e) {
         console.error("Failed to update snippet:", e);
     }
@@ -124,6 +127,7 @@ export async function handleDuplicateSnippet(id: string) {
         const duplicated = await duplicateSnippet(id);
         await loadSnippets();
         activeSnippetStore.set(duplicated);
+        await refreshUndoState();
     } catch (e) {
         console.error("Failed to duplicate snippet:", e);
     }
@@ -136,6 +140,7 @@ export async function handleTrashSnippet(id: string) {
             activeSnippetStore.set(null);
         }
         await loadSnippets();
+        await refreshUndoState();
     } catch (e) {
         console.error("Failed to trash snippet:", e);
     }

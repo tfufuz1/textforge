@@ -181,14 +181,177 @@ pub async fn execute_bulk_operation(
             }
             tx.commit().await.map_err(|e| e.to_string())?;
         }
-        BulkOperationDto::BulkTransform { snippet_ids, .. } => {
+        BulkOperationDto::BulkTransform { snippet_ids, pipeline_id, save_results } => {
+            let mut preview_list = Vec::new();
+            let mut undo_actions = Vec::new();
+
             for id in snippet_ids {
-                failed.push(BulkOperationFailedDto { id: id.clone(), error: serde_json::json!({ "code": "NOT_IMPLEMENTED" }) });
+                #[derive(sqlx::FromRow)]
+                struct SnipRow { id: String, title: String, content: String }
+
+                let snip = match sqlx::query_as::<_, SnipRow>("SELECT id, title, content FROM snippets WHERE id = ?")
+                    .bind(id)
+                    .fetch_optional(&state.db)
+                    .await
+                {
+                    Ok(Some(s)) => s,
+                    Ok(None) => {
+                        failed.push(BulkOperationFailedDto {
+                            id: id.clone(),
+                            error: serde_json::json!({ "code": "SNIPPET_NOT_FOUND" }),
+                        });
+                        continue;
+                    }
+                    Err(e) => {
+                        failed.push(BulkOperationFailedDto {
+                            id: id.clone(),
+                            error: serde_json::json!({ "code": "STORAGE_ERROR", "details": e.to_string() }),
+                        });
+                        continue;
+                    }
+                };
+
+                match crate::commands::transform::run_pipeline(
+                    pipeline_id.clone(),
+                    snip.content.clone(),
+                    state.clone(),
+                )
+                .await
+                {
+                    Ok(res) => {
+                        if *save_results {
+                            let now = chrono::Utc::now().timestamp_millis();
+                            let update_res = sqlx::query("UPDATE snippets SET content = ?, updated_at = ? WHERE id = ?")
+                                .bind(&res.final_output)
+                                .bind(now)
+                                .bind(id)
+                                .execute(&state.db)
+                                .await;
+
+                            match update_res {
+                                Ok(_) => {
+                                    succeeded.push(id.clone());
+                                    undo_actions.push(crate::commands::undo::UndoActionDto::TransformApply {
+                                        snippet_id: id.clone(),
+                                        original_content: snip.content,
+                                        transformed_content: res.final_output,
+                                        pipeline_id: Some(pipeline_id.clone()),
+                                        script_id: None,
+                                    });
+                                }
+                                Err(e) => {
+                                    failed.push(BulkOperationFailedDto {
+                                        id: id.clone(),
+                                        error: serde_json::json!({ "code": "STORAGE_ERROR", "details": e.to_string() }),
+                                    });
+                                }
+                            }
+                        } else {
+                            succeeded.push(id.clone());
+                            preview_list.push(BulkOperationPreviewDto {
+                                id: id.clone(),
+                                preview: res.final_output,
+                            });
+                        }
+                    }
+                    Err(err_msg) => {
+                        failed.push(BulkOperationFailedDto {
+                            id: id.clone(),
+                            error: serde_json::json!({ "code": "PIPELINE_ERROR", "details": err_msg }),
+                        });
+                    }
+                }
+            }
+
+            if *save_results && !undo_actions.is_empty() {
+                let now = chrono::Utc::now().timestamp_millis();
+                let undo_entry = crate::commands::undo::UndoEntryDto {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    performed_at: now,
+                    description: format!("Bulk Transformation auf {} Snippets angewendet", undo_actions.len()),
+                    action: crate::commands::undo::UndoActionDto::BulkOperation {
+                        operations: undo_actions,
+                    },
+                };
+                if let Ok(mut stack) = state.undo_stack.lock() {
+                    stack.push(undo_entry);
+                }
+            }
+
+            if !preview_list.is_empty() {
+                previews = Some(preview_list);
             }
         }
-        BulkOperationDto::BulkExport { snippet_ids, .. } => {
-             for id in snippet_ids {
-                failed.push(BulkOperationFailedDto { id: id.clone(), error: serde_json::json!({ "code": "NOT_IMPLEMENTED" }) });
+        BulkOperationDto::BulkExport { snippet_ids, format, output_path } => {
+            #[derive(Serialize, sqlx::FromRow)]
+            struct SnipRow { id: String, title: String, content: String, content_type: String }
+
+            let mut fetched_snippets = Vec::new();
+
+            for id in snippet_ids {
+                match sqlx::query_as::<_, SnipRow>("SELECT id, title, content, content_type FROM snippets WHERE id = ?")
+                    .bind(id)
+                    .fetch_optional(&state.db)
+                    .await
+                {
+                    Ok(Some(s)) => {
+                        succeeded.push(id.clone());
+                        fetched_snippets.push(s);
+                    }
+                    Ok(None) => {
+                        failed.push(BulkOperationFailedDto {
+                            id: id.clone(),
+                            error: serde_json::json!({ "code": "SNIPPET_NOT_FOUND" }),
+                        });
+                    }
+                    Err(e) => {
+                        failed.push(BulkOperationFailedDto {
+                            id: id.clone(),
+                            error: serde_json::json!({ "code": "STORAGE_ERROR", "details": e.to_string() }),
+                        });
+                    }
+                }
+            }
+
+            let export_res = match format.to_lowercase().as_str() {
+                "json" | "json_array" => {
+                    let json_data = serde_json::to_string_pretty(&fetched_snippets).unwrap_or_default();
+                    std::fs::write(output_path, json_data)
+                }
+                "text" | "markdown" => {
+                    let combined = fetched_snippets
+                        .iter()
+                        .map(|s| format!("# {}\n\n{}", s.title, s.content))
+                        .collect::<Vec<_>>()
+                        .join("\n\n---\n\n");
+                    std::fs::write(output_path, combined)
+                }
+                "csv" => {
+                    let mut csv = String::from("id,title,content_type,content\n");
+                    for s in &fetched_snippets {
+                        let safe_title = s.title.replace('"', "\"\"");
+                        let safe_content = s.content.replace('"', "\"\"");
+                        csv.push_str(&format!(
+                            "\"{}\",\"{}\",\"{}\",\"{}\"\n",
+                            s.id, safe_title, s.content_type, safe_content
+                        ));
+                    }
+                    std::fs::write(output_path, csv)
+                }
+                _ => {
+                    let json_data = serde_json::to_string_pretty(&fetched_snippets).unwrap_or_default();
+                    std::fs::write(output_path, json_data)
+                }
+            };
+
+            if let Err(e) = export_res {
+                for id in succeeded.clone() {
+                    failed.push(BulkOperationFailedDto {
+                        id,
+                        error: serde_json::json!({ "code": "EXPORT_WRITE_ERROR", "details": e.to_string() }),
+                    });
+                }
+                succeeded.clear();
             }
         }
     }

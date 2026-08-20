@@ -600,6 +600,7 @@ pub async fn trash_snippet(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let snippet_before = get_snippet(id.clone(), state.clone()).await.ok();
     let now = chrono::Utc::now().timestamp_millis();
     sqlx::query("UPDATE snippets SET location_type = 'trash', updated_at = ? WHERE id = ?")
         .bind(now)
@@ -607,6 +608,22 @@ pub async fn trash_snippet(
         .execute(&state.db)
         .await
         .map_err(|e| e.to_string())?;
+
+    if let Some(snip) = snippet_before {
+        let undo_entry = crate::commands::undo::UndoEntryDto {
+            id: uuid::Uuid::new_v4().to_string(),
+            performed_at: now,
+            description: format!("Snippet '{}' in Papierkorb verschoben", snip.title),
+            action: crate::commands::undo::UndoActionDto::SnippetDelete {
+                deleted: serde_json::to_value(&snip).unwrap_or_default(),
+            },
+        };
+
+        if let Ok(mut stack) = state.undo_stack.lock() {
+            stack.push(undo_entry);
+        }
+    }
+
     Ok(())
 }
 
@@ -615,6 +632,7 @@ pub async fn restore_snippet(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    let snippet_before = get_snippet(id.clone(), state.clone()).await.ok();
     let now = chrono::Utc::now().timestamp_millis();
     sqlx::query("UPDATE snippets SET location_type = 'root', location_folder_id = NULL, updated_at = ? WHERE id = ?")
         .bind(now)
@@ -622,6 +640,22 @@ pub async fn restore_snippet(
         .execute(&state.db)
         .await
         .map_err(|e| e.to_string())?;
+
+    if let Some(snip) = snippet_before {
+        let undo_entry = crate::commands::undo::UndoEntryDto {
+            id: uuid::Uuid::new_v4().to_string(),
+            performed_at: now,
+            description: format!("Snippet '{}' wiederhergestellt", snip.title),
+            action: crate::commands::undo::UndoActionDto::SnippetCreate {
+                created: serde_json::to_value(&snip).unwrap_or_default(),
+            },
+        };
+
+        if let Ok(mut stack) = state.undo_stack.lock() {
+            stack.push(undo_entry);
+        }
+    }
+
     Ok(())
 }
 

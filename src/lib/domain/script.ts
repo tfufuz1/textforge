@@ -38,6 +38,7 @@ export interface ScriptTest {
 }
 
 export interface ScriptVersion {
+  readonly id: string;
   readonly version: number;
   readonly jsCode?: string;
   readonly regexPattern?: string;

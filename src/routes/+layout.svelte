@@ -5,12 +5,19 @@
     import { listen } from '@tauri-apps/api/event';
     import { loadClipboardHistory } from '../lib/stores/clipboard';
     import ToastContainer from '../lib/components/shared/ToastContainer.svelte';
+    import { initSession, updateSession } from '../lib/stores/session';
+    import type { AppView } from '../lib/domain/session';
 
     let { children } = $props();
     let currentPath = $derived($page.url.pathname);
 
     onMount(async () => {
-        // STATUS: Implemented (Phase 1 - Tauri clipboard event listener)
+        try {
+            await initSession();
+        } catch (e) {
+            console.warn("Failed to init workspace session:", e);
+        }
+
         try {
             await listen('clipboard:new_entry', async (event) => {
                 console.log('New clipboard entry:', event.payload);
@@ -19,6 +26,15 @@
         } catch (e) {
             console.warn("Tauri event listener failed (expected in browser preview)", e);
         }
+    });
+
+    $effect(() => {
+        let view: AppView = 'clipboard';
+        if (currentPath.startsWith('/snippets')) view = 'snippets';
+        else if (currentPath.startsWith('/scripts')) view = 'scripts';
+        else if (currentPath.startsWith('/pipelines')) view = 'pipelines';
+        else if (currentPath.startsWith('/settings')) view = 'settings';
+        updateSession({ activeView: view });
     });
 </script>
 
