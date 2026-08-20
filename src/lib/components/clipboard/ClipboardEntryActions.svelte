@@ -1,7 +1,7 @@
 <script lang="ts">
     import { pinEntry, deleteEntry, promoteToSnippet, getClipboardEntry, writeToClipboard } from '../../ipc/clipboard';
     import { loadClipboardHistory } from '../../stores/clipboard';
-    import { pushUndoAction } from '../../stores/undo';
+    import { refreshUndoState } from '../../stores/undo';
     import { pushNotification, Notifications } from '../../stores/notifications';
 
     let { entry } = $props();
@@ -29,6 +29,7 @@
     async function handlePromote() {
         await promoteToSnippet(entry.id, null, { _type: 'inbox', folderId: null });
         await loadClipboardHistory();
+        await refreshUndoState();
         pushNotification(Notifications.snippetSaved("Clipboard-Import"));
         pushNotification(Notifications.undoAvailable("Snippet aus Zwischenablage erstellt"));
     }
