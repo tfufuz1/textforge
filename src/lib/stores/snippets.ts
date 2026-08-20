@@ -6,6 +6,9 @@ import {
     updateSnippet, 
     trashSnippet,
     duplicateSnippet,
+    restoreSnippet,
+    deleteSnippetPermanently,
+    emptyTrash,
     type SnippetFilterDto, 
     type SnippetListItemDto,
     type SnippetDto,
@@ -14,9 +17,43 @@ import {
 } from '../ipc/snippets';
 import { refreshUndoState } from './undo';
 
+import { executeBulkOperation, type BulkOperation } from '../ipc/bulk';
+
 export const snippetsStore = writable<SnippetListItemDto[]>([]);
 export const activeSnippetStore = writable<SnippetDto | null>(null);
 export const selectedTagStore = writable<string | null>(null);
+export const selectedSnippetIdsStore = writable<Set<string>>(new Set());
+
+export function toggleSelectSnippetId(id: string) {
+    selectedSnippetIdsStore.update(set => {
+        const next = new Set(set);
+        if (next.has(id)) {
+            next.delete(id);
+        } else {
+            next.add(id);
+        }
+        return next;
+    });
+}
+
+export function clearSnippetSelection() {
+    selectedSnippetIdsStore.set(new Set());
+}
+
+export function selectAllSnippets(ids: string[]) {
+    selectedSnippetIdsStore.set(new Set(ids));
+}
+
+export async function handleBulkOperation(operation: BulkOperation) {
+    try {
+        await executeBulkOperation(operation);
+        clearSnippetSelection();
+        await loadSnippets();
+        await refreshUndoState();
+    } catch (e) {
+        console.error("Bulk operation failed:", e);
+    }
+}
 
 export const snippetFilterStore = writable<SnippetFilterDto>({
     searchQuery: '',
@@ -143,6 +180,43 @@ export async function handleTrashSnippet(id: string) {
         await refreshUndoState();
     } catch (e) {
         console.error("Failed to trash snippet:", e);
+    }
+}
+
+export async function handleRestoreSnippet(id: string) {
+    try {
+        await restoreSnippet(id);
+        if (get(activeSnippetStore)?.id === id) {
+            activeSnippetStore.set(null);
+        }
+        await loadSnippets();
+        await refreshUndoState();
+    } catch (e) {
+        console.error("Failed to restore snippet:", e);
+    }
+}
+
+export async function handleDeleteSnippetPermanently(id: string) {
+    try {
+        await deleteSnippetPermanently(id);
+        if (get(activeSnippetStore)?.id === id) {
+            activeSnippetStore.set(null);
+        }
+        await loadSnippets();
+        await refreshUndoState();
+    } catch (e) {
+        console.error("Failed to delete snippet permanently:", e);
+    }
+}
+
+export async function handleEmptyTrash() {
+    try {
+        await emptyTrash();
+        activeSnippetStore.set(null);
+        await loadSnippets();
+        await refreshUndoState();
+    } catch (e) {
+        console.error("Failed to empty trash:", e);
     }
 }
 

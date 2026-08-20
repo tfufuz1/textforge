@@ -210,7 +210,7 @@ pub async fn list_snippets(
     let filter = filter.unwrap_or_default();
 
     let mut query = sqlx::QueryBuilder::new(
-        "SELECT s.id, s.title, s.content, s.content_type, s.created_at, s.updated_at, s.is_pinned, s.favorite, s.color, GROUP_CONCAT(t.tag) as tags 
+        "SELECT s.id, s.title, s.content, s.content_type, s.created_at, s.updated_at, s.is_pinned, s.is_favorite, s.color, GROUP_CONCAT(t.tag) as tags
          FROM snippets s 
          LEFT JOIN snippet_tags t ON s.id = t.snippet_id 
          WHERE 1=1"
@@ -340,7 +340,7 @@ pub async fn list_snippets(
         created_at: i64,
         updated_at: i64,
         is_pinned: i64,
-        favorite: i64,
+        is_favorite: i64,
         color: Option<String>,
         tags: Option<String>,
     }
@@ -361,7 +361,7 @@ pub async fn list_snippets(
             created_at: r.created_at,
             updated_at: r.updated_at,
             is_pinned: r.is_pinned != 0,
-            is_favorite: r.favorite != 0,
+            is_favorite: r.is_favorite != 0,
             color: r.color,
             tags,
         }
@@ -390,12 +390,12 @@ pub async fn get_snippet(
         usage_count: i64,
         is_pinned: i64,
         is_template: i64,
-        favorite: i64,
+        is_favorite: i64,
         color: Option<String>,
     }
 
     let row = sqlx::query_as::<_, Row>(
-        "SELECT id, title, content, content_type, source_app, location_type, location_folder_id, created_at, updated_at, last_used_at, usage_count, is_pinned, is_template, favorite, color FROM snippets WHERE id = ?"
+        "SELECT id, title, content, content_type, source_app, location_type, location_folder_id, created_at, updated_at, last_used_at, usage_count, is_pinned, is_template, is_favorite, color FROM snippets WHERE id = ?"
     )
     .bind(&id)
     .fetch_optional(&state.db)
@@ -425,7 +425,7 @@ pub async fn get_snippet(
         usage_count: row.usage_count as u32,
         is_pinned: row.is_pinned != 0,
         is_template: row.is_template != 0,
-        is_favorite: row.favorite != 0,
+        is_favorite: row.is_favorite != 0,
         color: row.color,
         tags,
     })
@@ -539,8 +539,8 @@ pub async fn update_snippet(
     }
     if let Some(favorite) = draft.is_favorite {
         let f_val = if favorite { 1 } else { 0 };
-        sqlx::query("UPDATE snippets SET favorite = ?, updated_at = ? WHERE id = ?")
-            .bind(f_val).bind(now).bind(&id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+        sqlx::query("UPDATE snippets SET is_favorite = ?, favorite = ?, updated_at = ? WHERE id = ?")
+            .bind(f_val).bind(f_val).bind(now).bind(&id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
     }
     if let Some(color) = &draft.color {
         sqlx::query("UPDATE snippets SET color = ?, updated_at = ? WHERE id = ?")

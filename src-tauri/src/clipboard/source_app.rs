@@ -161,9 +161,69 @@ fn read_proc_comm(pid: u32) -> Option<String> {
     None
 }
 
-/// Procfs fallback strategy: inspect /proc/self/stat or active user process details.
+/// Procfs / compositor fallback strategy: query hyprctl, swaymsg, or inspect /proc
 async fn try_procfs_active() -> Option<String> {
-    // If no compositor active window PID was found directly, procfs returns None gracefully to avoid false positives.
+    // 1. Try hyprctl on Hyprland
+    let hypr_cmd = tokio::process::Command::new("hyprctl")
+        .args(["activewindow", "-j"])
+        .output();
+    if let Ok(Ok(output)) = timeout(Duration::from_millis(300), hypr_cmd).await {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                if let Some(class) = json.get("class").and_then(|v| v.as_str()) {
+                    if !class.trim().is_empty() {
+                        return Some(class.trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Try swaymsg on Sway
+    let sway_cmd = tokio::process::Command::new("swaymsg")
+        .args(["-t", "get_tree"])
+        .output();
+    if let Ok(Ok(output)) = timeout(Duration::from_millis(300), sway_cmd).await {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                if let Some(app) = find_sway_focused(&json) {
+                    return Some(app);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Helper to find focused app in sway window tree
+fn find_sway_focused(val: &serde_json::Value) -> Option<String> {
+    if val.get("focused").and_then(|v| v.as_bool()) == Some(true) {
+        if let Some(app) = val.get("app_id").and_then(|v| v.as_str()) {
+            if !app.trim().is_empty() { return Some(app.trim().to_string()); }
+        }
+        if let Some(window_props) = val.get("window_properties") {
+            if let Some(class) = window_props.get("class").and_then(|v| v.as_str()) {
+                if !class.trim().is_empty() { return Some(class.trim().to_string()); }
+            }
+        }
+    }
+    if let Some(nodes) = val.get("nodes").and_then(|v| v.as_array()) {
+        for node in nodes {
+            if let Some(found) = find_sway_focused(node) {
+                return Some(found);
+            }
+        }
+    }
+    if let Some(floating) = val.get("floating_nodes").and_then(|v| v.as_array()) {
+        for node in floating {
+            if let Some(found) = find_sway_focused(node) {
+                return Some(found);
+            }
+        }
+    }
     None
 }
 

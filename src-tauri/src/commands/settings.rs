@@ -115,11 +115,23 @@ pub async fn get_database_stats(
         .await
         .unwrap_or((0,));
 
+    let (page_count,): (i64,) = sqlx::query_as("PRAGMA page_count")
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or((0,));
+
+    let (page_size,): (i64,) = sqlx::query_as("PRAGMA page_size")
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or((0,));
+
+    let db_size_bytes = (page_count * page_size) as u64;
+
     Ok(DatabaseStatsDto {
         total_snippets: snippets_count as u32,
         total_clipboard_entries: clipboard_count as u32,
         total_scripts: scripts_count as u32,
         total_pipelines: pipelines_count as u32,
-        db_size_bytes: 0,
+        db_size_bytes,
     })
 }
