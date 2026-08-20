@@ -29,6 +29,16 @@ describe('ClipboardEntry Domain Core', () => {
         }
     });
 
+    test('contentHash calculates valid 64-character hex SHA-256 string', () => {
+        const text = 'Hello world';
+        const result = ClipboardEntry.create(text, Option.none());
+        expect(result._tag).toBe('Some');
+        if (result._tag === 'Some') {
+            // Known SHA-256 for 'Hello world'
+            expect(result.value.contentHash).toBe('64ec88ca00b268e5ba1a35678a1b5316d212f4f366b2477232534a8aeca37f3c');
+        }
+    });
+
     test('contentType is automatically detected upon entry creation', () => {
         const jsonResult = ClipboardEntry.create('{"key": "value"}', Option.none());
         expect(jsonResult._tag).toBe('Some');

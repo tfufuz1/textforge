@@ -189,11 +189,9 @@ mod tests {
     }
 
     #[tokio::test]
-    fn test_detect_source_app_graceful() {
+    async fn test_detect_source_app_graceful() {
         // Must return Option<String> without panic regardless of OS environment
-        let result = tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(detect_source_app());
+        let result = detect_source_app().await;
         let _ = result;
     }
 }
