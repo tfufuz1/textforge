@@ -35,6 +35,10 @@
         }
     }
 
+    function createNewSnippet() {
+        activeSnippetStore.set(null);
+    }
+
     async function applyBulkPin(pinned: boolean) {
         const snippetIds = Array.from($selectedSnippetIdsStore);
         if (snippetIds.length === 0) return;
@@ -94,10 +98,10 @@
     }
 </script>
 
-<div class="flex flex-col h-full space-y-2 overflow-hidden">
+<div class="flex flex-col h-full space-y-2.5 overflow-hidden">
     <!-- Header with Select-All & Bulk Toolbar -->
     {#if $snippetsStore.length > 0}
-        <div class="flex items-center justify-between px-2 py-1.5 bg-slate-900/80 rounded-xl border border-slate-800 text-xs">
+        <div class="flex items-center justify-between px-3 py-2 bg-slate-900/90 rounded-2xl border border-slate-800 text-xs shadow-sm">
             <label class="flex items-center space-x-2 cursor-pointer select-none text-slate-400 hover:text-slate-200">
                 <input
                     type="checkbox"
@@ -105,52 +109,52 @@
                     onchange={toggleSelectAll}
                     class="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0"
                 />
-                <span>Alle auswählen</span>
+                <span class="font-medium text-[11px]">Alle auswählen ({$snippetsStore.length})</span>
             </label>
 
             {#if $selectedSnippetIdsStore.size > 0}
                 <div class="flex items-center space-x-1.5">
-                    <span class="px-2 py-0.5 text-[10px] bg-indigo-950 text-indigo-300 rounded-lg border border-indigo-800/50 font-mono font-medium">
-                        {$selectedSnippetIdsStore.size} ausgewählt
+                    <span class="px-2 py-0.5 text-[10px] bg-indigo-950 text-indigo-300 rounded-lg border border-indigo-800/50 font-mono font-bold">
+                        {$selectedSnippetIdsStore.size} aktiv
                     </span>
                     <button 
                         onclick={() => applyBulkPin(true)}
-                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
+                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors text-xs"
                         title="Ausgewählte anheften"
                     >
                         📌
                     </button>
                     <button 
                         onclick={() => applyBulkFavorite(true)}
-                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
+                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors text-xs"
                         title="Ausgewählte favorisieren"
                     >
                         ⭐
                     </button>
                     <button 
                         onclick={applyBulkTag}
-                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
+                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors text-xs"
                         title="Tag hinzufügen"
                     >
                         🏷️
                     </button>
                     <button
                         onclick={applyBulkTransform}
-                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
+                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors text-xs"
                         title="Pipeline anwenden (Bulk Transform)"
                     >
                         ⚡
                     </button>
                     <button
                         onclick={applyBulkExport}
-                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors"
+                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors text-xs"
                         title="Ausgewählte exportieren (Bulk Export)"
                     >
                         📥
                     </button>
                     <button
                         onclick={applyBulkDelete}
-                        class="p-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 rounded-lg transition-colors"
+                        class="p-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 rounded-lg transition-colors text-xs"
                         title="Ausgewählte löschen"
                     >
                         🗑️
@@ -168,10 +172,10 @@
     {/if}
 
     <!-- Snippet List Items -->
-    <div class="space-y-2.5 overflow-y-auto flex-1 pr-1.5">
+    <div class="space-y-2.5 overflow-y-auto flex-1 pr-1.5 custom-scrollbar">
         {#each $snippetsStore as item (item.id)}
             <div
-                class="p-3.5 rounded-xl border transition-all duration-150 flex flex-col justify-between cursor-pointer group shadow-sm {$activeSnippetStore?.id === item.id ? 'bg-indigo-950/60 border-indigo-500/60 ring-1 ring-indigo-500/30' : 'bg-slate-900/60 hover:bg-slate-800/80 border-slate-800 hover:border-slate-700'}"
+                class="p-3.5 rounded-2xl border transition-all duration-150 flex flex-col justify-between cursor-pointer group shadow-sm {$activeSnippetStore?.id === item.id ? 'bg-indigo-950/70 border-indigo-500/70 ring-1 ring-indigo-500/30 shadow-indigo-950/40' : 'bg-slate-900/50 hover:bg-slate-900/90 border-slate-800/80 hover:border-slate-700'}"
                 onclick={() => selectSnippet(item.id)}
                 role="button"
                 tabindex="0"
@@ -187,16 +191,16 @@
                             class="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0 shrink-0"
                         />
                         <button
-                            class="text-xs p-1 rounded hover:bg-slate-800 transition-colors opacity-75 hover:opacity-100 shrink-0"
+                            class="text-xs p-1 rounded-md hover:bg-slate-800 transition-colors opacity-75 hover:opacity-100 shrink-0"
                             title={item.isPinned ? 'Fixierung aufheben' : 'Anheften'}
                             onclick={(e) => { e.stopPropagation(); togglePinSnippet(item); }}
                         >
                             {item.isPinned ? '📌' : '📍'}
                         </button>
                         {#if item.color}
-                            <span class="w-2 h-2 rounded-full shrink-0" style="background-color: {item.color}"></span>
+                            <span class="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style="background-color: {item.color}"></span>
                         {/if}
-                        <h3 class="font-semibold text-sm truncate text-slate-100 group-hover:text-indigo-300 transition-colors">{item.title}</h3>
+                        <h3 class="font-bold text-xs truncate text-slate-100 group-hover:text-indigo-300 transition-colors">{item.title}</h3>
                         <button
                             class="p-0.5 rounded text-xs shrink-0 hover:bg-slate-800"
                             title={item.isFavorite ? 'Favorit entfernen' : 'Als Favorit markieren'}
@@ -241,24 +245,35 @@
                     </div>
                 </div>
 
-                <p class="text-xs text-slate-400 line-clamp-2 mt-2 font-mono leading-relaxed bg-slate-950/40 p-2 rounded-lg border border-slate-800/50">
+                <p class="text-xs text-slate-400 line-clamp-2 mt-2 font-mono leading-relaxed bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/60">
                     {item.preview}
                 </p>
 
                 <div class="flex items-center justify-between mt-3 text-[10px] text-slate-500">
                     <div class="flex flex-wrap gap-1">
-                        <span class="px-1.5 py-0.5 bg-slate-800 text-slate-300 rounded font-mono font-medium">{item.contentType}</span>
+                        <span class="px-1.5 py-0.5 bg-slate-800/80 text-slate-300 rounded-md font-mono font-medium border border-slate-700/50">{item.contentType}</span>
                         {#each item.tags as tag}
-                            <span class="px-1.5 py-0.5 bg-indigo-950/80 text-indigo-300 rounded border border-indigo-800/40 font-medium">#{tag}</span>
+                            <span class="px-1.5 py-0.5 bg-indigo-950/80 text-indigo-300 rounded-md border border-indigo-800/40 font-semibold">#{tag}</span>
                         {/each}
                     </div>
                     <span class="font-mono text-slate-500 shrink-0 ml-2">{formatTime(item.updatedAt)}</span>
                 </div>
             </div>
         {:else}
-            <div class="p-8 text-center bg-slate-900/30 rounded-xl border border-slate-800/60 text-slate-500 text-sm space-y-2">
-                <div class="text-2xl">📝</div>
-                <p>Keine Snippets gefunden.</p>
+            <div class="py-12 px-4 text-center bg-slate-900/40 rounded-2xl border border-dashed border-slate-800/80 text-slate-400 space-y-3">
+                <div class="w-12 h-12 mx-auto rounded-2xl bg-indigo-950/50 border border-indigo-800/40 flex items-center justify-center text-xl text-indigo-400 shadow-md">
+                    📝
+                </div>
+                <div>
+                    <h3 class="text-xs font-bold text-slate-200">Keine Snippets vorhanden</h3>
+                    <p class="text-[11px] text-slate-500 mt-0.5">Erstelle dein erstes wiederverwendbares Text-Snippet.</p>
+                </div>
+                <button
+                    onclick={createNewSnippet}
+                    class="px-3.5 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-600/20 transition-all inline-flex items-center space-x-1"
+                >
+                    <span>+ Neues Snippet</span>
+                </button>
             </div>
         {/each}
     </div>

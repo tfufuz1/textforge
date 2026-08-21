@@ -77,34 +77,35 @@
 </script>
 
 <SnippetEditorLayout bind:viewMode={viewMode}>
-    <div class="h-full flex flex-col bg-slate-900/80 rounded-2xl border border-slate-800/80 p-5 shadow-xl backdrop-blur-md">
-        <div class="flex justify-between items-center pb-4 mb-4 border-b border-slate-800">
+    <div class="h-full flex flex-col bg-slate-900/90 rounded-2xl border border-slate-800/80 p-5 shadow-xl backdrop-blur-md">
+        <div class="flex justify-between items-center pb-4 mb-4 border-b border-slate-800/80">
             <div class="flex items-center space-x-3">
-                <h2 class="font-bold text-lg text-slate-100">
-                    {isEditing ? 'Snippet bearbeiten' : 'Neues Snippet'}
+                <h2 class="font-black text-base text-slate-100 flex items-center space-x-2">
+                    <span class="text-indigo-400">{isEditing ? '✏️' : '✨'}</span>
+                    <span>{isEditing ? 'Snippet bearbeiten' : 'Neues Snippet'}</span>
                 </h2>
                 {#if isTemplate}
-                    <span class="px-2 py-0.5 text-[10px] uppercase font-mono font-semibold tracking-wider rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    <span class="px-2.5 py-0.5 text-[10px] uppercase font-mono font-bold tracking-wider rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40">
                         ⚡ Template Mode
                     </span>
                 {/if}
                 {#if contentType === 'markdown'}
-                    <div class="flex items-center bg-slate-950/60 rounded-lg p-0.5 border border-slate-800 ml-2">
+                    <div class="flex items-center bg-slate-950/80 rounded-xl p-1 border border-slate-800/80 ml-2 shadow-inner">
                         <button 
                             onclick={() => viewMode = 'editor'}
-                            class="px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all {viewMode === 'editor' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}"
+                            class="px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all {viewMode === 'editor' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}"
                         >
                             Editor
                         </button>
                         <button 
                             onclick={() => viewMode = 'preview'}
-                            class="px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all {viewMode === 'preview' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}"
+                            class="px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all {viewMode === 'preview' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}"
                         >
                             Vorschau
                         </button>
                         <button 
                             onclick={() => viewMode = 'split'}
-                            class="px-2.5 py-1 text-[10px] font-semibold rounded-md transition-all {viewMode === 'split' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}"
+                            class="px-2.5 py-1 text-[10px] font-bold rounded-lg transition-all {viewMode === 'split' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}"
                         >
                             Split
                         </button>
@@ -114,7 +115,7 @@
             <div class="flex space-x-2 items-center">
                 {#if isEditing}
                     <!-- Color Picker -->
-                    <div class="flex items-center space-x-1 bg-slate-950/60 p-1 rounded-lg border border-slate-800">
+                    <div class="flex items-center space-x-1.5 bg-slate-950/80 p-1.5 rounded-xl border border-slate-800/80 shadow-inner">
                         {#each ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'] as c}
                             <button
                                 onclick={async () => {
@@ -136,29 +137,29 @@
                                 await handleUpdateSnippet($activeSnippetStore.id, { isFavorite: !$activeSnippetStore.isFavorite });
                             }
                         }}
-                        class="px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors border {$activeSnippetStore?.isFavorite ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-amber-300'}"
+                        class="px-3 py-1.5 text-xs font-semibold rounded-xl transition-all border {$activeSnippetStore?.isFavorite ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm' : 'bg-slate-800/80 text-slate-400 border-slate-700/80 hover:text-amber-300'}"
                         title="Favorit"
                     >
-                        {$activeSnippetStore?.isFavorite ? '⭐' : '☆'}
+                        {$activeSnippetStore?.isFavorite ? '⭐ Favorit' : '☆ Favorit'}
                     </button>
 
                     <button 
                         onclick={createNew} 
-                        class="px-3.5 py-1.5 text-xs font-medium bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors"
+                        class="px-3.5 py-1.5 text-xs font-semibold bg-slate-800/80 text-slate-300 border border-slate-700/80 rounded-xl hover:bg-slate-700/80 transition-all"
                     >
                         + Neu
                     </button>
                     <button 
                         onclick={duplicate} 
-                        class="px-3.5 py-1.5 text-xs font-medium bg-slate-800 text-slate-300 rounded-lg hover:bg-slate-700 transition-colors flex items-center space-x-1"
+                        class="px-3.5 py-1.5 text-xs font-semibold bg-slate-800/80 text-slate-300 border border-slate-700/80 rounded-xl hover:bg-slate-700/80 transition-all flex items-center space-x-1"
                         title="Duplizieren & Bearbeiten"
                     >
-                        <span>👥</span>
+                        <span>📄</span>
                         <span>Duplizieren</span>
                     </button>
                     <button 
                         onclick={copy} 
-                        class="px-3.5 py-1.5 text-xs font-medium bg-indigo-950 text-indigo-300 border border-indigo-700/50 rounded-lg hover:bg-indigo-900 transition-colors flex items-center space-x-1"
+                        class="px-3.5 py-1.5 text-xs font-semibold bg-indigo-950/80 text-indigo-300 border border-indigo-700/60 rounded-xl hover:bg-indigo-900 transition-all flex items-center space-x-1 shadow-sm"
                     >
                         <span>📋</span>
                         <span>Kopieren</span>
@@ -166,7 +167,7 @@
                 {/if}
                 <button 
                     onclick={save} 
-                    class="px-4 py-1.5 text-xs font-semibold bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-500 hover:to-indigo-500 shadow-md shadow-blue-500/20 transition-all"
+                    class="px-4 py-1.5 text-xs font-bold bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-indigo-600/25 transition-all"
                 >
                     Speichern
                 </button>
@@ -176,21 +177,21 @@
         <div class="space-y-4 flex-1 flex flex-col min-h-0">
             <div class="grid grid-cols-3 gap-4">
                 <div class="col-span-2">
-                    <label for="snippet-title" class="block text-xs font-semibold text-slate-400 mb-1.5">Titel</label>
+                    <label for="snippet-title" class="block text-xs font-bold text-slate-400 mb-1.5">Titel</label>
                     <input 
                         id="snippet-title"
                         type="text" 
                         bind:value={title} 
                         placeholder="Snippet Titel..." 
-                        class="w-full px-3.5 py-2 text-sm bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                        class="w-full px-3.5 py-2 text-sm bg-slate-950/80 border border-slate-800/90 rounded-xl text-slate-100 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all shadow-inner font-medium"
                     />
                 </div>
                 <div>
-                    <label for="snippet-content-type" class="block text-xs font-semibold text-slate-400 mb-1.5">Typ</label>
+                    <label for="snippet-content-type" class="block text-xs font-bold text-slate-400 mb-1.5">Typ</label>
                     <select 
                         id="snippet-content-type"
                         bind:value={contentType} 
-                        class="w-full px-3.5 py-2 text-sm bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 outline-none focus:border-indigo-500 transition-all"
+                        class="w-full px-3.5 py-2 text-sm bg-slate-950/80 border border-slate-800/90 rounded-xl text-slate-100 outline-none focus:border-indigo-500 transition-all shadow-inner font-medium"
                     >
                         <option value="plain_text">Plain Text</option>
                         <option value="markdown">Markdown</option>
@@ -205,13 +206,13 @@
             </div>
 
             <div>
-                <label for="snippet-tags" class="block text-xs font-semibold text-slate-400 mb-1.5">Tags (kommagetrennt)</label>
+                <label for="snippet-tags" class="block text-xs font-bold text-slate-400 mb-1.5">Tags (kommagetrennt)</label>
                 <input 
                     id="snippet-tags"
                     type="text" 
                     bind:value={tagsInput} 
                     placeholder="z.B. code, helper, api" 
-                    class="w-full px-3.5 py-2 text-sm bg-slate-950/60 border border-slate-800 rounded-xl text-slate-100 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                    class="w-full px-3.5 py-2 text-sm bg-slate-950/80 border border-slate-800/90 rounded-xl text-slate-100 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all shadow-inner font-medium"
                 />
             </div>
 
@@ -219,12 +220,12 @@
                 {#if viewMode === 'editor' || viewMode === 'split' || contentType !== 'markdown'}
                     <div class="flex-1 flex flex-col min-h-0 justify-between gap-4">
                         <div class="flex-1 flex flex-col min-h-0">
-                            <label for="snippet-content" class="block text-xs font-semibold text-slate-400 mb-1.5">Inhalt</label>
+                            <label for="snippet-content" class="block text-xs font-bold text-slate-400 mb-1.5">Inhalt</label>
                             <textarea 
                                 id="snippet-content"
                                 bind:value={content} 
-                                placeholder="Snippet Inhalt hier eingeben (z.B. Hallo {{name}}!)..." 
-                                class="flex-1 w-full p-4 font-mono text-sm bg-slate-950/80 border border-slate-800 rounded-xl text-slate-200 resize-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all leading-relaxed"
+                                placeholder="Snippet Inhalt hier eingeben..."
+                                class="flex-1 w-full p-4 font-mono text-sm bg-slate-950/90 border border-slate-800/90 rounded-2xl text-slate-200 resize-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all leading-relaxed shadow-inner"
                             ></textarea>
                         </div>
 
@@ -240,7 +241,7 @@
 
                 {#if (viewMode === 'preview' || viewMode === 'split') && contentType === 'markdown'}
                     <div class="flex-1 flex flex-col min-h-0">
-                        <span class="block text-xs font-semibold text-slate-400 mb-1.5">Vorschau (Markdown)</span>
+                        <span class="block text-xs font-bold text-slate-400 mb-1.5">Vorschau (Markdown)</span>
                         <SnippetPreview {content} />
                     </div>
                 {/if}
@@ -251,10 +252,10 @@
             <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-500 font-mono">
                 <div>
                     {#if isEditing && $activeSnippetStore}
-                        <span>ID: {$activeSnippetStore.id.substring(0, 8)}...</span>
+                        <span class="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-400">ID: {$activeSnippetStore.id.substring(0, 8)}...</span>
                     {/if}
                 </div>
-                <span>TextForge Stats Engine</span>
+                <span class="text-indigo-400 font-semibold">TextForge Stats Engine</span>
             </div>
         </div>
     </div>
