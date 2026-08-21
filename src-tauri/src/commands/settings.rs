@@ -3,14 +3,30 @@ use std::collections::HashMap;
 use tauri::State;
 use crate::AppState;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceSessionDto {
-    pub active_tab: String,
+    #[serde(default = "default_active_view")]
+    pub active_view: String,
     pub selected_snippet_id: Option<String>,
+    pub selected_script_id: Option<String>,
+    pub selected_pipeline_id: Option<String>,
     pub selected_clipboard_id: Option<String>,
     pub search_query: Option<String>,
+    #[serde(default = "default_true")]
     pub sidebar_open: bool,
+    pub sidebar_width: Option<u32>,
+    pub preview_mode: Option<String>,
+    pub filter_state: Option<serde_json::Value>,
+    pub saved_at: Option<i64>,
+}
+
+fn default_active_view() -> String {
+    "clipboard".to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Serialize)]

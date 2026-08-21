@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use crate::AppState;
 use std::fs::File;
 use std::io::{Write, Read};
@@ -233,6 +233,7 @@ pub async fn export_data(
 
 #[tauri::command]
 pub async fn import_data(
+    app: AppHandle,
     request: ImportRequestDto,
     state: State<'_, AppState>,
 ) -> Result<ImportResultDto, String> {
@@ -293,10 +294,17 @@ pub async fn import_data(
 
     let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().timestamp_millis();
+    let total_entries = entries.len();
 
-    for entry in entries {
+    for (idx, entry) in entries.into_iter().enumerate() {
         let name = entry.name;
         let raw_bytes = entry.raw_bytes;
+
+        app.emit("import:progress", serde_json::json!({
+            "processed": idx + 1,
+            "total": total_entries,
+            "currentFile": name
+        })).ok();
 
         // Checksum validation if present in manifest
         if let Some(expected_chk) = checksum_map.get(&name) {
