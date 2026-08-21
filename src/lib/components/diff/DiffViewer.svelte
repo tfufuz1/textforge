@@ -4,7 +4,7 @@
     let { original = '', modified = '' } = $props();
 
     let diffResult = $state<any>(null);
-    let viewMode = $state<'unified' | 'split'>('unified');
+    let viewMode = $state<'unified' | 'split' | 'inline'>('unified');
 
     $effect(() => {
         if (original !== undefined && modified !== undefined) {
@@ -31,7 +31,6 @@
         while (i < lines.length) {
             const line = lines[i];
             if (line.kind === 'delete') {
-                // Check if next line is an insert to align them
                 if (i + 1 < lines.length && lines[i + 1].kind === 'insert') {
                     left.push(line);
                     right.push(lines[i + 1]);
@@ -68,7 +67,7 @@
                 {/if}
             </div>
             
-            <div class="flex bg-slate-900 rounded-lg p-0.5 border border-slate-800">
+            <div class="flex bg-slate-900 rounded-lg p-0.5 border border-slate-800 space-x-0.5">
                 <button
                     onclick={() => viewMode = 'unified'}
                     class="px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all {viewMode === 'unified' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}"
@@ -80,6 +79,12 @@
                     class="px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all {viewMode === 'split' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}"
                 >
                     Split
+                </button>
+                <button
+                    onclick={() => viewMode = 'inline'}
+                    class="px-2 py-0.5 text-[10px] font-semibold rounded-md transition-all {viewMode === 'inline' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}"
+                >
+                    Inline
                 </button>
             </div>
         </div>
@@ -109,7 +114,7 @@
                     {/if}
                 {/each}
             </div>
-        {:else}
+        {:else if viewMode === 'split'}
             <!-- Split Diff View -->
             <div class="font-mono text-xs overflow-auto max-h-72 rounded-lg border border-slate-900 leading-relaxed bg-slate-950 grid grid-cols-2 divide-x divide-slate-900 select-text">
                 <!-- Left Pane: Old/Original -->
@@ -149,6 +154,19 @@
                         {/if}
                     {/each}
                 </div>
+            </div>
+        {:else}
+            <!-- Inline Word Diff View -->
+            <div class="font-mono text-xs overflow-auto max-h-72 rounded-lg border border-slate-900 leading-relaxed bg-slate-950 p-3 flex flex-wrap gap-1 select-text">
+                {#each diffResult.lines as line}
+                    {#if line.kind === 'insert'}
+                        <span class="bg-emerald-900/40 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-700/50 underline">{line.content.trim()}</span>
+                    {:else if line.kind === 'delete'}
+                        <span class="bg-rose-900/40 text-rose-300 px-1.5 py-0.5 rounded border border-rose-700/50 line-through opacity-80">{line.content.trim()}</span>
+                    {:else}
+                        <span class="text-slate-300 px-1 py-0.5">{line.content.trim()}</span>
+                    {/if}
+                {/each}
             </div>
         {/if}
     </div>

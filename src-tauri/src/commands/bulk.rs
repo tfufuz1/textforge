@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use crate::AppState;
+use crate::commands::undo::{UndoActionDto, UndoEntryDto};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(tag = "_type", rename_all = "snake_case")]
@@ -79,6 +80,7 @@ pub struct BulkOperationResultDto {
 
 #[tauri::command]
 pub async fn execute_bulk_operation(
+    app: AppHandle,
     operation: BulkOperationDto,
     state: State<'_, AppState>,
 ) -> Result<BulkOperationResultDto, String> {
@@ -89,8 +91,26 @@ pub async fn execute_bulk_operation(
 
     match &operation {
         BulkOperationDto::BulkDelete { snippet_ids, permanent } => {
+            let total = snippet_ids.len();
+            let mut undo_actions = Vec::new();
             let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
-            for id in snippet_ids {
+
+            for (idx, id) in snippet_ids.iter().enumerate() {
+                app.emit("bulk:progress", serde_json::json!({
+                    "processed": idx + 1,
+                    "total": total,
+                    "snippetId": id
+                })).ok();
+
+                #[derive(sqlx::FromRow)]
+                struct SnipRow { id: String, title: String, content: String, content_type: String }
+                let fetched = sqlx::query_as::<_, SnipRow>("SELECT id, title, content, content_type FROM snippets WHERE id = ?")
+                    .bind(id)
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .ok()
+                    .flatten();
+
                 let res = if *permanent {
                     sqlx::query("DELETE FROM snippets WHERE id = ?").bind(id).execute(&mut *tx).await
                 } else {
@@ -100,11 +120,36 @@ pub async fn execute_bulk_operation(
                 };
 
                 match res {
-                    Ok(_) => succeeded.push(id.clone()),
+                    Ok(_) => {
+                        succeeded.push(id.clone());
+                        if let Some(snip) = fetched {
+                            undo_actions.push(UndoActionDto::SnippetDelete {
+                                deleted: serde_json::json!({
+                                    "id": snip.id,
+                                    "title": snip.title,
+                                    "content": snip.content,
+                                    "contentType": snip.content_type
+                                })
+                            });
+                        }
+                    }
                     Err(e) => failed.push(BulkOperationFailedDto { id: id.clone(), error: serde_json::json!({ "code": "STORAGE_ERROR", "details": e.to_string() }) }),
                 }
             }
             tx.commit().await.map_err(|e| e.to_string())?;
+
+            if !undo_actions.is_empty() {
+                let now = chrono::Utc::now().timestamp_millis();
+                let undo_entry = UndoEntryDto {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    performed_at: now,
+                    description: format!("Bulk Delete auf {} Snippets angewendet", undo_actions.len()),
+                    action: UndoActionDto::BulkOperation { operations: undo_actions },
+                };
+                if let Ok(mut stack) = state.undo_stack.lock() {
+                    stack.push(undo_entry);
+                }
+            }
         }
         BulkOperationDto::BulkPin { snippet_ids, pinned } => {
             let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
