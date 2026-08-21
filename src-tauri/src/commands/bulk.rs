@@ -87,7 +87,7 @@ pub async fn execute_bulk_operation(
     let start = Instant::now();
     let mut succeeded = Vec::new();
     let mut failed = Vec::new();
-    let previews = None;
+    let mut previews = None;
 
     match &operation {
         BulkOperationDto::BulkDelete { snippet_ids, permanent } => {
@@ -233,9 +233,9 @@ pub async fn execute_bulk_operation(
 
             for id in snippet_ids {
                 #[derive(sqlx::FromRow)]
-                struct SnipRow { id: String, title: String, content: String }
+                struct SnipRow { content: String }
 
-                let snip = match sqlx::query_as::<_, SnipRow>("SELECT id, title, content FROM snippets WHERE id = ?")
+                let snip = match sqlx::query_as::<_, SnipRow>("SELECT content FROM snippets WHERE id = ?")
                     .bind(id)
                     .fetch_optional(&state.db)
                     .await
