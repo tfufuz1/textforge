@@ -22,6 +22,10 @@
         if (!selectedId) return;
         try {
             if (selectedType === 'script') {
+                const script = $scriptsStore.find(s => s.id === selectedId);
+                if ((script?.category === 'security' || (script as any)?.isSafetyCritical) && !confirm(`Achtung: "${script?.name}" ist als sicherheitskritisch/destruktiv markiert. Fortfahren?`)) {
+                    return;
+                }
                 const res = await invoke<{ output: string }>('execute_script', {
                     req: { scriptId: selectedId, input: content }
                 });

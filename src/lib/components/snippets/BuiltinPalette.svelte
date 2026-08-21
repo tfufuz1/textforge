@@ -70,6 +70,9 @@
     );
 
     async function applyBuiltin(id: string) {
+        if ((id === 'redact_sensitive' || id === 'strip_pii') && !confirm("Achtung: Dies ist eine sicherheitskritische/destruktive Operation. Möchten Sie wirklich fortfahren?")) {
+            return;
+        }
         try {
             const res = await invoke<string>('execute_builtin', {
                 id,
