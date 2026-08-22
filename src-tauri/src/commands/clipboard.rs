@@ -183,6 +183,7 @@ pub async fn list_clipboard_history(
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SnippetLocationDto {
+    #[serde(rename = "_type")]
     pub _type: String,
     pub folder_id: Option<String>,
 }
