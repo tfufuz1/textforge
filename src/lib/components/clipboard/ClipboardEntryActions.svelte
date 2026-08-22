@@ -4,6 +4,12 @@
     import { refreshUndoState } from '../../stores/undo';
     import { pushNotification, Notifications } from '../../stores/notifications';
 
+    import CopyIcon from '$lib/components/icons/CopyIcon.svelte';
+    import PinIcon from '$lib/components/icons/PinIcon.svelte';
+    import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
+    import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
+    import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
+
     let { entry } = $props();
 
     async function handleCopy() {
@@ -35,22 +41,44 @@
     }
 </script>
 
-<div class="actions flex items-center space-x-2 shrink-0">
+<div class="actions flex items-center space-x-1.5 shrink-0">
     {#if entry.promotedToSnippetId}
-        <span class="px-2.5 py-1 bg-emerald-950/80 text-emerald-300 border border-emerald-800/40 rounded-lg text-xs font-medium">✓ Als Snippet</span>
+        <span class="px-2 py-1 bg-emerald-950/80 text-emerald-300 border border-emerald-800/40 rounded-xl text-xs font-semibold flex items-center space-x-1">
+            <CheckIcon class="w-3.5 h-3.5 text-emerald-400" />
+            <span>Snippet</span>
+        </span>
     {:else}
-        <button class="px-2.5 py-1 bg-indigo-950 text-indigo-300 hover:bg-indigo-900 border border-indigo-700/50 rounded-lg text-xs font-medium transition-colors" onclick={handlePromote}>
-            + Snippet
+        <button
+            class="px-2.5 py-1 bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/50 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1 shadow-sm"
+            onclick={handlePromote}
+            title="Als Snippet speichern"
+        >
+            <PlusIcon class="w-3.5 h-3.5 text-indigo-400" />
+            <span>Snippet</span>
         </button>
     {/if}
-    <button class="px-2.5 py-1 bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700/50 rounded-lg text-xs font-medium transition-colors" onclick={handleCopy} title="Kopieren">
-        📋 Kopieren
+
+    <button
+        class="p-1.5 bg-slate-800/90 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700/60 rounded-xl transition-all flex items-center justify-center"
+        onclick={handleCopy}
+        title="In Zwischenablage kopieren"
+    >
+        <CopyIcon class="w-3.5 h-3.5" />
     </button>
-    <button class="px-2.5 py-1 bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700/50 rounded-lg text-xs font-medium transition-colors" onclick={handlePin}>
-        {entry.isPinned ? '📌 Pinned' : '📍 Pin'}
+
+    <button
+        class="p-1.5 border rounded-xl transition-all flex items-center justify-center {entry.isPinned ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-slate-800/90 text-slate-300 hover:text-white hover:bg-slate-700 border-slate-700/60'}"
+        onclick={handlePin}
+        title={entry.isPinned ? 'Entpinnen' : 'Pinnen'}
+    >
+        <PinIcon class="w-3.5 h-3.5" filled={entry.isPinned} />
     </button>
-    <button class="p-1.5 bg-rose-950/40 text-slate-400 hover:text-rose-300 hover:bg-rose-950/80 border border-rose-900/40 rounded-lg text-xs transition-colors" onclick={handleDelete} title="Löschen">
-        🗑️
+
+    <button
+        class="p-1.5 bg-rose-950/40 text-rose-400 hover:text-rose-200 hover:bg-rose-900/80 border border-rose-900/40 rounded-xl transition-all flex items-center justify-center"
+        onclick={handleDelete}
+        title="Löschen"
+    >
+        <TrashIcon class="w-3.5 h-3.5" />
     </button>
 </div>
-
