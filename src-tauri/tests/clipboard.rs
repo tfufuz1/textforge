@@ -2,6 +2,13 @@ use textforge::db::init_db;
 use tempfile::NamedTempFile;
 
 #[tokio::test]
+async fn test_fresh_database_migration() {
+    let tmp = NamedTempFile::new().unwrap();
+    let result = init_db(tmp.path()).await;
+    assert!(result.is_ok(), "Database initialization on fresh file failed: {:?}", result.err());
+}
+
+#[tokio::test]
 async fn test_clipboard_operations() {
     let tmp = NamedTempFile::new().unwrap();
     let db = init_db(tmp.path()).await.unwrap();

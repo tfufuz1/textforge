@@ -2,7 +2,7 @@
 
 > Kanonische Arbeitsanweisung für Claude und alle LLM-Agenten in diesem Repository.
 > Bei Widersprüchen zwischen dieser Datei und der Spec gilt: **Spec ist Wahrheit, CLAUDE.md ist Werkzeug.**
-> Spezifikation: `docs/textforge-interface-spec-v2.1.md`
+> Spezifikation: `SPECIFICATION.1.md`
 
 ---
 
@@ -18,7 +18,7 @@ Lesbarkeit vor Micro-Optimierung, explizite Typen vor cleveren Abstraktionen.
 | Plattform | KDE Plasma 6 · Wayland · Linux |
 | Clipboard | `wl-paste --watch` subprocess (kein X11, kein Polling) |
 | Sandbox | QuickJS via `rquickjs` — kein eval im Frontend |
-| Spec-Datei | `docs/textforge-interface-spec-v2.1.md` |
+| Spec-Datei | `SPECIFICATION.1.md` |
 | Tests | Vitest (Domain Core) · Rust `#[test]` (IPC-Commands) |
 
 ---
@@ -473,7 +473,7 @@ Im Domain Core: nein. In Komponenten für Entwicklungs-Debugging: nur mit `impor
 Clipboard-Inhalt darf **niemals** in irgendeinem Log erscheinen.
 
 **F: Wie aktualisiere ich die Spec?**
-Spec-Änderungen (nicht nur Code) über `docs/textforge-interface-spec-v2.1.md` —
+Spec-Änderungen (nicht nur Code) über `SPECIFICATION.1.md` —
 mit einem klaren `[GEÄNDERT — vX.Y]`-Marker am betroffenen Abschnitt.
 
 ---
