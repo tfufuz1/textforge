@@ -5,6 +5,14 @@ description = "TextForge v2.1"
 authors = ["you"]
 edition = "2021"
 
+[[bin]]
+name = "textforge"
+path = "src/main.rs"
+
+[[bin]]
+name = "textforge-cli"
+path = "src/bin/textforge-cli.rs"
+
 [build-dependencies]
 tauri-build = { version = "2" }
 

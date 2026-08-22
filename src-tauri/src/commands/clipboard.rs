@@ -411,14 +411,18 @@ pub async fn write_to_clipboard(
     snippet_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    // INVARIANT-AR2: Set feedback-loop guard before writing
+    crate::automation::dispatcher::AutomationDispatcher::set_internal_write_guard(true);
+
     let copy_res = tokio::process::Command::new("wl-copy")
         .arg(&content)
         .status()
         .await;
 
     if copy_res.is_err() || !copy_res.as_ref().map(|s| s.success()).unwrap_or(false) {
-        let mut board = arboard::Clipboard::new().map_err(|e| e.to_string())?;
-        board.set_text(content.clone()).map_err(|e| e.to_string())?;
+        if let Ok(mut board) = arboard::Clipboard::new() {
+            board.set_text(content.clone()).ok();
+        }
     }
 
     if let Some(s_id) = snippet_id {
@@ -430,6 +434,8 @@ pub async fn write_to_clipboard(
             .await
             .ok();
     }
+
+    crate::automation::dispatcher::AutomationDispatcher::set_internal_write_guard(false);
 
     Ok(())
 }

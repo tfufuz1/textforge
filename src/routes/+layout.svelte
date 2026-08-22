@@ -7,6 +7,10 @@
     import { loadClipboardHistory } from '../lib/stores/clipboard';
     import ToastContainer from '../lib/components/shared/ToastContainer.svelte';
     import CommandPalette from '../lib/components/shared/CommandPalette.svelte';
+    import GlobalSearchBar from '$lib/components/search/GlobalSearchBar.svelte';
+    import GlobalSearchResults from '$lib/components/search/GlobalSearchResults.svelte';
+    import CollectionTabBar from '$lib/components/collections/CollectionTabBar.svelte';
+    import CollectionTabEditor from '$lib/components/collections/CollectionTabEditor.svelte';
     import { initSession, updateSession } from '../lib/stores/session';
     import { performUndo, performRedo } from '../lib/stores/undo';
     import type { AppView } from '../lib/domain/session';
@@ -14,6 +18,7 @@
     let { children } = $props();
     let currentPath = $derived($page.url.pathname);
     let isCommandPaletteOpen = $state(false);
+    let showCreateCollectionModal = $state(false);
 
     onMount(async () => {
         try {
@@ -158,6 +163,16 @@
                 </div>
                 <span class="text-[10px] text-slate-600 font-mono">Alt+4</span>
             </a>
+            <a
+                href="/sequences"
+                class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 {currentPath.startsWith('/sequences') ? 'bg-indigo-600/20 text-indigo-200 border border-indigo-500/40 shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'}"
+            >
+                <div class="flex items-center space-x-3">
+                    <span class="text-base">🔗</span>
+                    <span>Sequenzen</span>
+                </div>
+                <span class="text-[10px] text-slate-600 font-mono">Alt+5</span>
+            </a>
             <a 
                 href="/settings" 
                 class="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 {currentPath.startsWith('/settings') ? 'bg-indigo-600/20 text-indigo-200 border border-indigo-500/40 shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent'}"
@@ -177,8 +192,22 @@
         </div>
     </aside>
 
-    <main class="flex-1 overflow-auto relative bg-slate-950 select-text">
-        {@render children()}
+    <main class="flex-1 overflow-auto relative bg-slate-950 select-text flex flex-col">
+        <!-- Top Search Header & Collection Tab Bar -->
+        <div class="p-3 border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md space-y-2">
+            <GlobalSearchBar />
+            <CollectionTabBar onOpenCreateModal={() => showCreateCollectionModal = true} />
+        </div>
+
+        <div class="flex-1 overflow-auto p-2">
+            <GlobalSearchResults />
+            {@render children()}
+        </div>
+
+        {#if showCreateCollectionModal}
+            <CollectionTabEditor onClose={() => showCreateCollectionModal = false} />
+        {/if}
+
         <ToastContainer />
         <CommandPalette bind:isOpen={isCommandPaletteOpen} />
     </main>

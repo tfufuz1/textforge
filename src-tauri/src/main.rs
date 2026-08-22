@@ -124,7 +124,37 @@ async fn main() {
             commands::settings::set_setting,
             commands::settings::get_workspace_session,
             commands::settings::save_workspace_session,
-            commands::settings::get_database_stats
+            commands::settings::get_database_stats,
+
+            // STATUS: Implemented (v3.0 - Collection Tabs)
+            commands::collections::list_collection_tabs,
+            commands::collections::create_collection_tab,
+            commands::collections::delete_collection_tab,
+            commands::collections::add_item_to_tab,
+            commands::collections::remove_item_from_tab,
+
+            // STATUS: Implemented (v3.0 - Tag Registry)
+            commands::tags::suggest_tags,
+            commands::tags::rename_tag,
+            commands::tags::merge_tags,
+            commands::tags::set_tag_color,
+
+            // STATUS: Implemented (v3.0 - Sequences Engine)
+            commands::sequences::list_sequences,
+            commands::sequences::create_sequence,
+            commands::sequences::delete_sequence,
+            commands::sequences::quick_combine,
+
+            // STATUS: Implemented (v3.0 - Global Search & Ignore Rules)
+            commands::global_search::search_all_items,
+            commands::ignore_rules::list_ignore_rules,
+            commands::ignore_rules::create_ignore_rule,
+            commands::ignore_rules::delete_ignore_rule,
+
+            // STATUS: Implemented (v3.0 - Automation Script Engine)
+            commands::automation::list_automation_rules,
+            commands::automation::create_automation_rule,
+            commands::automation::delete_automation_rule
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

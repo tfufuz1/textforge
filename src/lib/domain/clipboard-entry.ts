@@ -16,6 +16,8 @@ export interface ClipboardEntry {
   readonly wordCount:    number;
   readonly isPinned:     boolean;
   readonly tags:         ReadonlyArray<TagName>;
+  readonly sourceMimeTypes?: ReadonlyArray<string>;
+  readonly mimeData?:    Option<string>;
 
   readonly promotedToSnippetId: Option<SnippetId>;
 }
