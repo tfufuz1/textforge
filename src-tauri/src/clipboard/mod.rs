@@ -162,6 +162,11 @@ pub async fn insert_clipboard_entry_with_config(
         return;
     }
 
+    // INVARIANT-AR2: Feedback loop guard check
+    if crate::automation::dispatcher::AutomationDispatcher::should_suppress_clipboard_event() {
+        return;
+    }
+
     use sha2::{Digest, Sha256};
 
     let mut hasher = Sha256::new();

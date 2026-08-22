@@ -18,9 +18,15 @@
 
 <div class="p-4 rounded-2xl border transition-all duration-150 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 group shadow-sm {entry.isPinned ? 'ring-1 ring-amber-500/40 border-amber-500/50 bg-amber-950/15 shadow-amber-950/20' : 'border-slate-800/80 bg-slate-900/50 hover:bg-slate-900/90 hover:border-slate-700/80'}">
     <div class="min-w-0 flex-1 w-full">
-        <p class="font-mono text-xs text-slate-200 line-clamp-3 leading-relaxed bg-slate-950/80 p-3 rounded-xl border border-slate-800/80 select-all group-hover:border-slate-700/60 transition-colors">
-            {entry.preview}
-        </p>
+        {#if entry.contentType === 'image/png' && entry.preview.startsWith('data:image')}
+            <div class="bg-slate-950/80 p-2 rounded-xl border border-slate-800/80 flex items-center justify-center max-h-36 overflow-hidden">
+                <img src={entry.preview} alt="Clipboard Thumbnail" class="max-h-32 object-contain rounded" />
+            </div>
+        {:else}
+            <p class="font-mono text-xs text-slate-200 line-clamp-3 leading-relaxed bg-slate-950/80 p-3 rounded-xl border border-slate-800/80 select-all group-hover:border-slate-700/60 transition-colors">
+                {entry.preview}
+            </p>
+        {/if}
         <div class="flex flex-wrap items-center gap-2 text-[10px] text-slate-400 mt-2.5">
             {#if entry.isPinned}
                 <span class="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-md font-semibold flex items-center space-x-1">

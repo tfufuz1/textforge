@@ -2,6 +2,8 @@
     import { onMount } from 'svelte';
     import { getDatabaseStats, getAllSettings, setSetting, type DatabaseStats } from '../../lib/ipc/session';
     import { exportData, importData, previewImport, type ImportPreviewDto } from '../../lib/ipc/import-export';
+    import AutomationRuleManager from '$lib/components/automation/AutomationRuleManager.svelte';
+    import IgnoreRulesManager from '$lib/components/search/IgnoreRulesManager.svelte';
 
     let stats = $state<DatabaseStats | null>(null);
     let settings = $state<Record<string, string>>({});
@@ -188,6 +190,16 @@
                     </select>
                 </div>
             </div>
+        </div>
+
+        <!-- Ignore Rules Section -->
+        <div class="col-span-2">
+            <IgnoreRulesManager />
+        </div>
+
+        <!-- Automation Script Engine Section -->
+        <div class="col-span-2">
+            <AutomationRuleManager />
         </div>
 
         <!-- Import / Export Section -->
