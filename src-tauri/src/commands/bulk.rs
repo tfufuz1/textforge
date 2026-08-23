@@ -61,7 +61,7 @@ pub struct BulkProgressPayload {
     pub current_id: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct BulkOperationFailedDto {
     pub id: String,

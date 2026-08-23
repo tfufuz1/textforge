@@ -211,16 +211,17 @@ export async function handleDuplicateSnippet(id: string) {
     }
 }
 
-export async function handleDuplicateSnippetsBulk(ids: string[]) {
+export async function handleDuplicateSnippetsBulk(ids: string[], targetFolderId?: string | null) {
     if (ids.length === 0) return;
     try {
-        const duplicated = await duplicateSnippetsBulk(ids);
+        const res = await duplicateSnippetsBulk(ids, targetFolderId);
         clearSnippetSelection();
         await loadSnippets();
-        if (duplicated.length > 0) {
-            activeSnippetStore.set(duplicated[duplicated.length - 1]);
+        if (res.succeeded.length > 0) {
+            activeSnippetStore.set(res.succeeded[res.succeeded.length - 1]);
         }
         await refreshUndoState();
+        return res;
     } catch (e) {
         console.error("Failed to duplicate snippets bulk:", e);
     }

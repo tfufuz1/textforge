@@ -39,6 +39,11 @@ export interface SnippetListItemDto {
   tags: string[];
 }
 
+export interface DuplicateSnippetsResultDto {
+  succeeded: SnippetDto[];
+  failed: { id: string; error: any }[];
+}
+
 export interface SnippetDto {
   id: string;
   title: string;
@@ -125,8 +130,8 @@ export async function duplicateSnippet(id: string): Promise<SnippetDto> {
   return invoke('duplicate_snippet', { id });
 }
 
-export async function duplicateSnippetsBulk(ids: string[]): Promise<SnippetDto[]> {
-  return invoke('duplicate_snippets_bulk', { ids });
+export async function duplicateSnippetsBulk(ids: string[], targetFolderId?: string | null): Promise<DuplicateSnippetsResultDto> {
+  return invoke('duplicate_snippets_bulk', { ids, targetFolderId });
 }
 
 export async function trashSnippet(id: string): Promise<void> {
