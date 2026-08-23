@@ -168,8 +168,8 @@ pub async fn execute_bulk_operation(
             let now = chrono::Utc::now().timestamp_millis();
             let fav_val = if *favorite { 1 } else { 0 };
             for id in snippet_ids {
-                match sqlx::query("UPDATE snippets SET is_favorite = ?, favorite = ?, updated_at = ? WHERE id = ?")
-                    .bind(fav_val).bind(fav_val).bind(now).bind(id).execute(&mut *tx).await {
+                match sqlx::query("UPDATE snippets SET is_favorite = ?, updated_at = ? WHERE id = ?")
+                    .bind(fav_val).bind(now).bind(id).execute(&mut *tx).await {
                     Ok(_) => succeeded.push(id.clone()),
                     Err(e) => failed.push(BulkOperationFailedDto { id: id.clone(), error: serde_json::json!({ "code": "STORAGE_ERROR", "details": e.to_string() }) }),
                 }
