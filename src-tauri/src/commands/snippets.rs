@@ -537,33 +537,35 @@ pub async fn update_snippet(
     let now = chrono::Utc::now().timestamp_millis();
     let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
 
-    if let Some(title) = &draft.title {
-        sqlx::query("UPDATE snippets SET title = ?, updated_at = ? WHERE id = ?")
-            .bind(title).bind(now).bind(&id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
-    }
-    if let Some(content) = &draft.content {
-        let is_template = if content.contains("{{") && content.contains("}}") { 1 } else { 0 };
-        sqlx::query("UPDATE snippets SET content = ?, is_template = ?, updated_at = ? WHERE id = ?")
-            .bind(content).bind(is_template).bind(now).bind(&id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
-    }
-    if let Some(ct) = &draft.content_type {
-        sqlx::query("UPDATE snippets SET content_type = ?, updated_at = ? WHERE id = ?")
-            .bind(ct).bind(now).bind(&id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
-    }
-    if let Some(pinned) = draft.is_pinned {
-        let p_val = if pinned { 1 } else { 0 };
-        sqlx::query("UPDATE snippets SET is_pinned = ?, updated_at = ? WHERE id = ?")
-            .bind(p_val).bind(now).bind(&id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
-    }
-    if let Some(favorite) = draft.is_favorite {
-        let f_val = if favorite { 1 } else { 0 };
-        sqlx::query("UPDATE snippets SET is_favorite = ?, favorite = ?, updated_at = ? WHERE id = ?")
-            .bind(f_val).bind(f_val).bind(now).bind(&id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
-    }
-    if let Some(color) = &draft.color {
-        sqlx::query("UPDATE snippets SET color = ?, updated_at = ? WHERE id = ?")
-            .bind(color).bind(now).bind(&id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
-    }
+    let is_pinned_val = draft.is_pinned.map(|p| if p { 1i64 } else { 0i64 });
+    let is_favorite_val = draft.is_favorite.map(|f| if f { 1i64 } else { 0i64 });
+    let is_template_val = draft.content.as_ref().map(|c| if c.contains("{{") && c.contains("}}") { 1i64 } else { 0i64 });
+
+    sqlx::query(
+        "UPDATE snippets SET
+          title = COALESCE(?, title),
+          content = COALESCE(?, content),
+          content_type = COALESCE(?, content_type),
+          is_pinned = COALESCE(?, is_pinned),
+          is_favorite = COALESCE(?, is_favorite),
+          color = COALESCE(?, color),
+          is_template = COALESCE(?, is_template),
+          updated_at = ?
+        WHERE id = ?"
+    )
+    .bind(draft.title.as_deref())
+    .bind(draft.content.as_deref())
+    .bind(draft.content_type.as_deref())
+    .bind(is_pinned_val)
+    .bind(is_favorite_val)
+    .bind(draft.color.as_deref())
+    .bind(is_template_val)
+    .bind(now)
+    .bind(&id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
     if let Some(tags) = &draft.tags {
         sqlx::query("DELETE FROM snippet_tags WHERE snippet_id = ?").bind(&id).execute(&mut *tx).await.map_err(|e| e.to_string())?;
         for tag in tags {
