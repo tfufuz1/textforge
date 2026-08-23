@@ -14,6 +14,7 @@
     import ClipboardEntry from './ClipboardEntry.svelte';
     import ClipboardFilter from './ClipboardFilter.svelte';
     import ComposeModal from './ComposeModal.svelte';
+    import TransformModal from './TransformModal.svelte';
 
     // SVG Icons
     import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
@@ -26,6 +27,7 @@
 
     let selectedIds = $state<Set<string>>(new Set());
     let showComposeModal = $state(false);
+    let transformingEntryId = $state<string | null>(null);
 
     onMount(async () => {
         await loadClipboardHistory(0);
@@ -203,6 +205,7 @@
                 {entry}
                 isSelected={selectedIds.has(entry.id)}
                 onToggleSelect={toggleSelect}
+                onTransform={(id) => transformingEntryId = id}
             />
         {:else}
             <div class="py-16 px-6 text-center bg-slate-900/40 rounded-2xl border border-dashed border-slate-800/80 text-slate-400 space-y-3 my-auto">
@@ -252,5 +255,12 @@
             selectedIds = new Set();
             showComposeModal = false;
         }}
+    />
+{/if}
+
+{#if transformingEntryId}
+    <TransformModal
+        entryId={transformingEntryId}
+        onClose={() => transformingEntryId = null}
     />
 {/if}

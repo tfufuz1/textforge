@@ -11,8 +11,14 @@
     import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
     import PlusIcon from '$lib/components/icons/PlusIcon.svelte';
     import CheckIcon from '$lib/components/icons/CheckIcon.svelte';
+    import SparklesIcon from '$lib/components/icons/SparklesIcon.svelte';
 
-    let { entry } = $props();
+    interface Props {
+        entry: any;
+        onTransform?: (id: string) => void;
+    }
+
+    let { entry, onTransform }: Props = $props();
 
     async function handleCopy() {
         try {
@@ -73,6 +79,17 @@
         >
             <PlusIcon class="w-3.5 h-3.5 text-indigo-400" />
             <span>Snippet</span>
+        </button>
+    {/if}
+
+    {#if onTransform}
+        <button
+            class="px-2.5 py-1 bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/50 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1 shadow-sm"
+            onclick={() => onTransform && onTransform(entry.id)}
+            title="Mit Skript oder Pipeline transformieren"
+        >
+            <SparklesIcon class="w-3.5 h-3.5 text-indigo-400" />
+            <span>Transformieren</span>
         </button>
     {/if}
 
