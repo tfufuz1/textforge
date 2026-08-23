@@ -7,12 +7,17 @@
     import { loadClipboardHistory } from '../lib/stores/clipboard';
     import ToastContainer from '../lib/components/shared/ToastContainer.svelte';
     import CommandPalette from '../lib/components/shared/CommandPalette.svelte';
+    import QuickCaptureModal from '$lib/components/clipboard/QuickCaptureModal.svelte';
     import GlobalSearchBar from '$lib/components/search/GlobalSearchBar.svelte';
     import GlobalSearchResults from '$lib/components/search/GlobalSearchResults.svelte';
     import CollectionTabBar from '$lib/components/collections/CollectionTabBar.svelte';
     import CollectionTabEditor from '$lib/components/collections/CollectionTabEditor.svelte';
     import { initSession, updateSession } from '../lib/stores/session';
     import { performUndo, performRedo } from '../lib/stores/undo';
+    import { findShortcutMatch } from '$lib/shortcuts/registry';
+    import { loadSnippets, activeSnippetStore, handleDuplicateSnippet } from '$lib/stores/snippets';
+    import { writeToClipboard } from '$lib/ipc/snippets';
+    import { pushNotification, Notifications } from '$lib/stores/notifications';
     import type { AppView } from '../lib/domain/session';
 
     // SVG Icons
@@ -27,6 +32,7 @@
     let { children } = $props();
     let currentPath = $derived($page.url.pathname);
     let isCommandPaletteOpen = $state(false);
+    let isQuickCaptureOpen = $state(false);
     let showCreateCollectionModal = $state(false);
 
     onMount(async () => {
@@ -55,42 +61,108 @@
         updateSession({ activeView: view });
     });
 
+    function focusGlobalSearch() {
+        const searchInput = document.querySelector<HTMLInputElement>('input[placeholder*="Suchen"]');
+        if (searchInput) {
+            searchInput.focus();
+            searchInput.select();
+        }
+    }
+
+    async function duplicateFocusedSnippet() {
+        if ($activeSnippetStore?.id) {
+            await handleDuplicateSnippet($activeSnippetStore.id);
+            pushNotification(Notifications.snippetSaved(`Kopie von ${$activeSnippetStore.title}`));
+        } else {
+            pushNotification({
+                id: crypto.randomUUID(),
+                severity: 'info',
+                title: 'Hinweis',
+                message: { _tag: 'Some', value: 'Kein Snippet zum Duplizieren ausgewählt.' },
+                duration: 2000,
+                action: { _tag: 'None' },
+                createdAt: Date.now() as any
+            });
+        }
+    }
+
+    async function copyTransformedResult() {
+        if ($activeSnippetStore?.content) {
+            await writeToClipboard($activeSnippetStore.content, $activeSnippetStore.id);
+            pushNotification(Notifications.snippetCopied());
+        } else {
+            pushNotification({
+                id: crypto.randomUUID(),
+                severity: 'info',
+                title: 'Hinweis',
+                message: { _tag: 'Some', value: 'Kein Snippet-Inhalt zum Kopieren vorhanden.' },
+                duration: 2000,
+                action: { _tag: 'None' },
+                createdAt: Date.now() as any
+            });
+        }
+    }
+
     function handleGlobalKeyDown(e: KeyboardEvent) {
-        const ctrl = e.ctrlKey || e.metaKey;
-
-        if (ctrl && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
-            e.preventDefault();
-            isCommandPaletteOpen = !isCommandPaletteOpen;
-            return;
-        }
-
-        if (ctrl && (e.key === 'z' || e.key === 'Z')) {
-            if (e.shiftKey) {
+        // If an editor context is active, try context-specific matches first
+        if (currentPath.startsWith('/snippets')) {
+            const contextMatch = findShortcutMatch(e, 'snippet_editor');
+            if (contextMatch?.actionId === 'copy_transformed_result') {
                 e.preventDefault();
-                performRedo();
-            } else {
-                e.preventDefault();
-                performUndo();
+                copyTransformedResult();
+                return;
             }
-            return;
+
+            const listMatch = findShortcutMatch(e, 'snippet_list');
+            if (listMatch?.actionId === 'duplicate_snippet') {
+                e.preventDefault();
+                duplicateFocusedSnippet();
+                return;
+            }
         }
 
-        if (ctrl && (e.key === 'y' || e.key === 'Y')) {
-            e.preventDefault();
-            performRedo();
-            return;
+        const matched = findShortcutMatch(e, 'global');
+
+        if (matched) {
+            switch (matched.actionId) {
+                case 'toggle_command_palette':
+                    e.preventDefault();
+                    isCommandPaletteOpen = !isCommandPaletteOpen;
+                    return;
+                case 'open_quick_capture':
+                    e.preventDefault();
+                    isQuickCaptureOpen = true;
+                    return;
+                case 'focus_quick_search':
+                    e.preventDefault();
+                    focusGlobalSearch();
+                    return;
+                case 'perform_undo':
+                    e.preventDefault();
+                    performUndo();
+                    return;
+                case 'perform_redo':
+                    e.preventDefault();
+                    performRedo();
+                    return;
+                case 'create_snippet':
+                    e.preventDefault();
+                    goto('/snippets');
+                    return;
+                case 'navigate_settings':
+                    e.preventDefault();
+                    goto('/settings');
+                    return;
+            }
         }
 
-        if (ctrl && (e.key === 'n' || e.key === 'N')) {
-            e.preventDefault();
-            goto('/snippets');
-            return;
-        }
-
-        if (ctrl && e.key === ',') {
-            e.preventDefault();
-            goto('/settings');
-            return;
+        // Additional fallback modifier checks for navigation shortcuts
+        const ctrl = e.ctrlKey || e.metaKey;
+        if (e.altKey) {
+            if (e.key === '1') { e.preventDefault(); goto('/clipboard'); return; }
+            if (e.key === '3') { e.preventDefault(); goto('/scripts'); return; }
+            if (e.key === '4') { e.preventDefault(); goto('/pipelines'); return; }
+            if (e.key === '5') { e.preventDefault(); goto('/sequences'); return; }
         }
     }
 </script>
@@ -117,8 +189,19 @@
             </div>
         </div>
 
-        <!-- Command Palette Trigger -->
-        <div class="px-2.5 pt-2.5">
+        <!-- Quick Capture & Command Palette Triggers -->
+        <div class="px-2.5 pt-2.5 space-y-1.5">
+            <button
+                onclick={() => isQuickCaptureOpen = true}
+                class="w-full px-2.5 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 rounded-xl text-xs font-semibold text-indigo-200 flex items-center justify-between transition-all group shadow-sm"
+            >
+                <span class="flex items-center space-x-2">
+                    <span class="text-indigo-400 font-bold">⚡</span>
+                    <span class="text-[11px]">Quick Capture</span>
+                </span>
+                <kbd class="px-1 py-0.5 text-[9px] font-mono bg-indigo-950/80 text-indigo-300 rounded border border-indigo-700/80">Ctrl+Alt+V</kbd>
+            </button>
+
             <button
                 onclick={() => isCommandPaletteOpen = true}
                 class="w-full px-2.5 py-1.5 bg-slate-950/80 hover:bg-slate-800/80 border border-slate-800 rounded-xl text-xs text-slate-400 flex items-center justify-between transition-all group shadow-inner"
@@ -225,6 +308,16 @@
         {/if}
 
         <ToastContainer />
-        <CommandPalette bind:isOpen={isCommandPaletteOpen} />
+        <CommandPalette
+            bind:isOpen={isCommandPaletteOpen}
+            onOpenQuickCapture={() => isQuickCaptureOpen = true}
+            onFocusSearch={focusGlobalSearch}
+            onDuplicateFocusedSnippet={duplicateFocusedSnippet}
+            onCopyTransformedResult={copyTransformedResult}
+        />
+        <QuickCaptureModal
+            bind:isOpen={isQuickCaptureOpen}
+            onSnippetCreated={() => loadSnippets()}
+        />
     </main>
 </div>
