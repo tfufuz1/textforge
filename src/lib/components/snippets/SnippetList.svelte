@@ -23,6 +23,7 @@
         handleRestoreSnippet,
         handleDeleteSnippetPermanently
     } from '../../stores/snippets';
+    import BulkTemplateModal from '../template/BulkTemplateModal.svelte';
 
     interface BulkProgressPayload {
         completed: number;
@@ -32,6 +33,7 @@
 
     let isBulkProcessing = $state(false);
     let bulkProgress = $state<BulkProgressPayload>({ completed: 0, total: 0, currentId: '' });
+    let showBulkTemplateModal = $state(false);
 
     onMount(() => {
         let unlisten: UnlistenFn | undefined;
@@ -234,6 +236,13 @@
                         🏷️
                     </button>
                     <button
+                        onclick={() => showBulkTemplateModal = true}
+                        class="p-1.5 bg-indigo-900/80 hover:bg-indigo-800 text-indigo-200 rounded-lg transition-colors text-xs border border-indigo-700/50"
+                        title="Templates ausfüllen (Variablen-Konsole)"
+                    >
+                        📝
+                    </button>
+                    <button
                         onclick={applyBulkTransform}
                         class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors text-xs"
                         title="Pipeline anwenden (Bulk Transform)"
@@ -390,3 +399,10 @@
         {/if}
     </div>
 </div>
+
+{#if showBulkTemplateModal}
+    <BulkTemplateModal
+        snippetIds={Array.from($selectedSnippetIdsStore)}
+        onClose={() => showBulkTemplateModal = false}
+    />
+{/if}
