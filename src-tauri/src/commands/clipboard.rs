@@ -183,6 +183,7 @@ pub async fn list_clipboard_history(
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SnippetLocationDto {
+    #[serde(rename = "_type")]
     pub _type: String,
     pub folder_id: Option<String>,
 }
@@ -457,6 +458,40 @@ mod tests {
         assert!(filter.search_query.is_none());
         assert!(filter.content_types.is_empty());
         assert!(filter.source_apps.is_empty());
+    }
+
+    #[test]
+    fn test_snippet_location_dto_deserialization() {
+        let json = r#"{"_type": "inbox", "folderId": null}"#;
+        let loc: SnippetLocationDto = serde_json::from_str(json).unwrap();
+        assert_eq!(loc._type, "inbox");
+        assert!(loc.folder_id.is_none());
+
+        let json_folder = r#"{"_type": "folder", "folderId": "f-123"}"#;
+        let loc_f: SnippetLocationDto = serde_json::from_str(json_folder).unwrap();
+        assert_eq!(loc_f._type, "folder");
+        assert_eq!(loc_f.folder_id.as_deref(), Some("f-123"));
+    }
+
+    #[test]
+    fn test_clipboard_entry_list_item_dto_preview() {
+        let long_content = "a".repeat(300);
+        let preview: String = long_content.chars().take(200).collect();
+        assert_eq!(preview.len(), 200);
+
+        let item = ClipboardEntryListItemDto {
+            id: "clip-1".into(),
+            preview,
+            content_type: "plain_text".into(),
+            source_app: Some("code".into()),
+            captured_at: 1000,
+            size_bytes: 300,
+            is_pinned: false,
+            match_score: None,
+            promoted_to_snippet_id: None,
+        };
+        assert_eq!(item.id, "clip-1");
+        assert_eq!(item.preview.len(), 200);
     }
 }
 

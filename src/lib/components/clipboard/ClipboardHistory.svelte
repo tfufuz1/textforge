@@ -9,6 +9,7 @@
         clipboardHasPrevStore
     } from '../../stores/clipboard';
     import { clearHistory, deleteEntry, pinEntry, promoteToSnippet, getClipboardEntry, writeToClipboard } from '../../ipc/clipboard';
+    import { loadSnippets } from '../../stores/snippets';
     import ClipboardEntry from './ClipboardEntry.svelte';
     import ClipboardFilter from './ClipboardFilter.svelte';
 
@@ -86,6 +87,7 @@
         }
         selectedIds = new Set();
         await loadClipboardHistory();
+        await loadSnippets();
         pushNotification(Notifications.snippetSaved(`${count} Snippets importiert`));
     }
 

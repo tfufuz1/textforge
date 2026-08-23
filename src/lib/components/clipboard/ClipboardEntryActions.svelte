@@ -1,6 +1,8 @@
 <script lang="ts">
+    import { goto } from '$app/navigation';
     import { pinEntry, deleteEntry, promoteToSnippet, getClipboardEntry, writeToClipboard } from '../../ipc/clipboard';
     import { loadClipboardHistory } from '../../stores/clipboard';
+    import { loadSnippets, selectSnippet } from '../../stores/snippets';
     import { refreshUndoState } from '../../stores/undo';
     import { pushNotification, Notifications } from '../../stores/notifications';
 
@@ -33,20 +35,36 @@
     }
 
     async function handlePromote() {
-        await promoteToSnippet(entry.id, null, { _type: 'inbox', folderId: null });
-        await loadClipboardHistory();
-        await refreshUndoState();
-        pushNotification(Notifications.snippetSaved("Clipboard-Import"));
-        pushNotification(Notifications.undoAvailable("Snippet aus Zwischenablage erstellt"));
+        try {
+            const snippetId = await promoteToSnippet(entry.id, null, { _type: 'inbox', folderId: null });
+            await loadClipboardHistory();
+            await loadSnippets();
+            await refreshUndoState();
+            pushNotification(Notifications.snippetSaved("Clipboard-Import"));
+            pushNotification(Notifications.undoAvailable("Snippet aus Zwischenablage erstellt"));
+        } catch (e) {
+            console.error("Failed to promote clipboard entry:", e);
+        }
+    }
+
+    async function handleViewSnippet() {
+        if (entry.promotedToSnippetId) {
+            await selectSnippet(entry.promotedToSnippetId);
+            await goto('/snippets');
+        }
     }
 </script>
 
 <div class="actions flex items-center space-x-1.5 shrink-0">
     {#if entry.promotedToSnippetId}
-        <span class="px-2 py-1 bg-emerald-950/80 text-emerald-300 border border-emerald-800/40 rounded-xl text-xs font-semibold flex items-center space-x-1">
+        <button
+            class="px-2.5 py-1 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/40 rounded-xl text-xs font-semibold flex items-center space-x-1 transition-all cursor-pointer shadow-sm"
+            onclick={handleViewSnippet}
+            title="Snippet anzeigen und bearbeiten"
+        >
             <CheckIcon class="w-3.5 h-3.5 text-emerald-400" />
             <span>Snippet</span>
-        </span>
+        </button>
     {:else}
         <button
             class="px-2.5 py-1 bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/50 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1 shadow-sm"

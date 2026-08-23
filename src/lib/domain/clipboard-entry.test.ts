@@ -76,4 +76,32 @@ describe('ClipboardEntry Domain Core', () => {
             expect(draft.content).toBe('Short note');
         }
     });
+
+    test('toSnippetDraft provides fallback title for leading whitespace or empty line', () => {
+        const textWithEmptyFirstLine = '\n   \n   Actual content here';
+        const result = ClipboardEntry.create(textWithEmptyFirstLine, Option.none());
+        expect(result._tag).toBe('Some');
+        if (result._tag === 'Some') {
+            const draft = ClipboardEntry.toSnippetDraft(result.value);
+            expect(draft.title).toBe('Actual content here');
+            expect(draft.content).toBe(textWithEmptyFirstLine);
+            expect(draft.location).toEqual({ _type: 'inbox' });
+        }
+    });
+
+    test('contentType detects template syntax and HTML content correctly', () => {
+        const templateText = 'Hello {{name}}, welcome to {{service}}!';
+        const tmplResult = ClipboardEntry.create(templateText, Option.none());
+        expect(tmplResult._tag).toBe('Some');
+        if (tmplResult._tag === 'Some') {
+            expect(tmplResult.value.contentType).toBe('template');
+        }
+
+        const htmlText = '<html><body><h1>Title</h1></body></html>';
+        const htmlResult = ClipboardEntry.create(htmlText, Option.none());
+        expect(htmlResult._tag).toBe('Some');
+        if (htmlResult._tag === 'Some') {
+            expect(htmlResult.value.contentType).toBe('html');
+        }
+    });
 });
