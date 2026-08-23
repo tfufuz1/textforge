@@ -87,8 +87,8 @@ pub struct BulkOperationResultDto {
 }
 
 #[tauri::command]
-pub async fn execute_bulk_operation(
-    app: AppHandle,
+pub async fn execute_bulk_operation<R: tauri::Runtime>(
+    app: AppHandle<R>,
     operation: BulkOperationDto,
     state: State<'_, AppState>,
 ) -> Result<BulkOperationResultDto, String> {

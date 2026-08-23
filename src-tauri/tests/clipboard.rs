@@ -14,6 +14,8 @@ async fn test_clipboard_operations() {
     let db = init_db(tmp.path()).await.unwrap();
 
     // Insert dummy entry directly
+    // Note: size_bytes is a GENERATED ALWAYS AS ... VIRTUAL column in 003_clipboard.sql.
+    // Excluded from INSERT column list since SQLite rejects INSERTs into generated columns.
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().timestamp_millis();
     sqlx::query(

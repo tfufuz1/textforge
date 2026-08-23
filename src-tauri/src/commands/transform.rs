@@ -227,6 +227,16 @@ pub async fn run_pipeline(
 ) -> Result<PipelineExecutionResultDto, String> {
     let start = std::time::Instant::now();
 
+    let pipeline_exists = sqlx::query("SELECT 1 FROM pipelines WHERE id = ?")
+        .bind(&pipeline_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if pipeline_exists.is_none() {
+        return Err(format!("Pipeline not found: {}", pipeline_id));
+    }
+
     #[derive(sqlx::FromRow)]
     struct StepRow {
         id: String,

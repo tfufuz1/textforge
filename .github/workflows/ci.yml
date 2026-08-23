@@ -43,5 +43,5 @@ jobs:
             src-tauri/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run Rust Tests
+      - name: Run Fresh Database Migration & Rust Tests
         run: cargo test --manifest-path src-tauri/Cargo.toml
