@@ -117,6 +117,10 @@ export async function duplicateSnippet(id: string): Promise<SnippetDto> {
   return invoke('duplicate_snippet', { id });
 }
 
+export async function duplicateSnippetsBulk(ids: string[]): Promise<SnippetDto[]> {
+  return invoke('duplicate_snippets_bulk', { ids });
+}
+
 export async function trashSnippet(id: string): Promise<void> {
   return invoke('trash_snippet', { id });
 }

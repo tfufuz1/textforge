@@ -6,6 +6,7 @@ import {
     updateSnippet, 
     trashSnippet,
     duplicateSnippet,
+    duplicateSnippetsBulk,
     restoreSnippet,
     deleteSnippetPermanently,
     emptyTrash,
@@ -167,6 +168,21 @@ export async function handleDuplicateSnippet(id: string) {
         await refreshUndoState();
     } catch (e) {
         console.error("Failed to duplicate snippet:", e);
+    }
+}
+
+export async function handleDuplicateSnippetsBulk(ids: string[]) {
+    if (ids.length === 0) return;
+    try {
+        const duplicated = await duplicateSnippetsBulk(ids);
+        clearSnippetSelection();
+        await loadSnippets();
+        if (duplicated.length > 0) {
+            activeSnippetStore.set(duplicated[duplicated.length - 1]);
+        }
+        await refreshUndoState();
+    } catch (e) {
+        console.error("Failed to duplicate snippets bulk:", e);
     }
 }
 

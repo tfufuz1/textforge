@@ -9,6 +9,7 @@
         togglePinSnippet,
         toggleFavoriteSnippet,
         handleDuplicateSnippet,
+        handleDuplicateSnippetsBulk,
         toggleSelectSnippetId,
         clearSnippetSelection,
         selectAllSnippets,
@@ -49,6 +50,12 @@
         const snippetIds = Array.from($selectedSnippetIdsStore);
         if (snippetIds.length === 0) return;
         await handleBulkOperation({ _type: 'bulk_favorite', snippetIds, favorite });
+    }
+
+    async function applyBulkDuplicate() {
+        const snippetIds = Array.from($selectedSnippetIdsStore);
+        if (snippetIds.length === 0) return;
+        await handleDuplicateSnippetsBulk(snippetIds);
     }
 
     async function applyBulkDelete() {
@@ -130,6 +137,13 @@
                         title="Ausgewählte favorisieren"
                     >
                         ⭐
+                    </button>
+                    <button
+                        onclick={applyBulkDuplicate}
+                        class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors text-xs"
+                        title="Ausgewählte duplizieren"
+                    >
+                        📄
                     </button>
                     <button 
                         onclick={applyBulkTag}
