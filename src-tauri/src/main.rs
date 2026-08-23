@@ -69,6 +69,7 @@ async fn main() {
             commands::snippets::create_snippet,
             commands::snippets::update_snippet,
             commands::snippets::duplicate_snippet,
+            commands::snippets::duplicate_snippets_bulk,
             commands::snippets::trash_snippet,
             commands::snippets::restore_snippet,
             commands::snippets::delete_snippet_permanently,

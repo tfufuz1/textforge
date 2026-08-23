@@ -431,10 +431,21 @@ pub async fn get_snippet(
     })
 }
 
-#[tauri::command]
-pub async fn create_snippet(
+pub(crate) fn next_copy_title(title: &str) -> String {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| regex::Regex::new(r"^(.*) \(Kopie(?: (\d+))?\)$").unwrap());
+    if let Some(caps) = re.captures(title) {
+        let base = caps.get(1).unwrap().as_str();
+        let n: u32 = caps.get(2).map(|m| m.as_str().parse().unwrap_or(1)).unwrap_or(1);
+        format!("{} (Kopie {})", base, n + 1)
+    } else {
+        format!("{} (Kopie)", title)
+    }
+}
+
+pub(crate) async fn insert_snippet_row_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     draft: CreateSnippetDto,
-    state: State<'_, AppState>,
 ) -> Result<SnippetDto, String> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().timestamp_millis();
@@ -442,8 +453,6 @@ pub async fn create_snippet(
     let is_template = if draft.content.contains("{{") && draft.content.contains("}}") { 1 } else { 0 };
 
     let location_type = if draft.folder_id.is_some() { "folder" } else { "root" };
-
-    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
 
     sqlx::query(
         "INSERT INTO snippets (id, title, content, content_type, location_type, location_folder_id, created_at, updated_at, is_template)
@@ -458,7 +467,7 @@ pub async fn create_snippet(
     .bind(now)
     .bind(now)
     .bind(is_template)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| e.to_string())?;
 
@@ -467,17 +476,15 @@ pub async fn create_snippet(
         sqlx::query("INSERT OR IGNORE INTO snippet_tags (snippet_id, tag) VALUES (?, ?)")
             .bind(&id)
             .bind(tag)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await
             .map_err(|e| e.to_string())?;
     }
 
-    tx.commit().await.map_err(|e| e.to_string())?;
-
-    let created_snippet = SnippetDto {
-        id: id.clone(),
-        title: draft.title.clone(),
-        content: draft.content.clone(),
+    Ok(SnippetDto {
+        id,
+        title: draft.title,
+        content: draft.content,
         content_type,
         source_app: None,
         location_type: location_type.to_string(),
@@ -491,12 +498,23 @@ pub async fn create_snippet(
         is_favorite: false,
         color: None,
         tags,
-    };
+    })
+}
 
+#[tauri::command]
+pub async fn create_snippet(
+    draft: CreateSnippetDto,
+    state: State<'_, AppState>,
+) -> Result<SnippetDto, String> {
+    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
+    let created_snippet = insert_snippet_row_tx(&mut tx, draft).await?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    let now = created_snippet.created_at;
     let undo_entry = crate::commands::undo::UndoEntryDto {
         id: uuid::Uuid::new_v4().to_string(),
         performed_at: now,
-        description: format!("Snippet '{}' erstellt", draft.title),
+        description: format!("Snippet '{}' erstellt", created_snippet.title),
         action: crate::commands::undo::UndoActionDto::SnippetCreate {
             created: serde_json::to_value(&created_snippet).unwrap_or_default(),
         },
@@ -581,8 +599,11 @@ pub async fn duplicate_snippet(
     state: State<'_, AppState>,
 ) -> Result<SnippetDto, String> {
     let original = get_snippet(id, state.clone()).await?;
-    let new_title = format!("{} (Kopie)", original.title);
-    create_snippet(
+    let new_title = next_copy_title(&original.title);
+
+    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
+    let created_snippet = insert_snippet_row_tx(
+        &mut tx,
         CreateSnippetDto {
             title: new_title,
             content: original.content,
@@ -590,9 +611,77 @@ pub async fn duplicate_snippet(
             tags: Some(original.tags),
             folder_id: original.folder_id,
         },
-        state,
     )
-    .await
+    .await?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    let now = created_snippet.created_at;
+    let undo_entry = crate::commands::undo::UndoEntryDto {
+        id: uuid::Uuid::new_v4().to_string(),
+        performed_at: now,
+        description: format!("Snippet '{}' dupliziert", original.title),
+        action: crate::commands::undo::UndoActionDto::SnippetCreate {
+            created: serde_json::to_value(&created_snippet).unwrap_or_default(),
+        },
+    };
+
+    if let Ok(mut stack) = state.undo_stack.lock() {
+        stack.push(undo_entry);
+    }
+
+    Ok(created_snippet)
+}
+
+#[tauri::command]
+pub async fn duplicate_snippets_bulk(
+    ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<SnippetDto>, String> {
+    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
+    let mut created_snippets = Vec::new();
+    let mut undo_actions = Vec::new();
+    let now = chrono::Utc::now().timestamp_millis();
+
+    for id in ids {
+        let original = get_snippet(id, state.clone()).await?;
+        let new_title = next_copy_title(&original.title);
+        let created = insert_snippet_row_tx(
+            &mut tx,
+            CreateSnippetDto {
+                title: new_title,
+                content: original.content,
+                content_type: Some(original.content_type),
+                tags: Some(original.tags),
+                folder_id: original.folder_id,
+            },
+        )
+        .await?;
+
+        undo_actions.push(crate::commands::undo::UndoActionDto::SnippetCreate {
+            created: serde_json::to_value(&created).unwrap_or_default(),
+        });
+
+        created_snippets.push(created);
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    if !undo_actions.is_empty() {
+        let undo_entry = crate::commands::undo::UndoEntryDto {
+            id: uuid::Uuid::new_v4().to_string(),
+            performed_at: now,
+            description: format!("{} Snippets dupliziert", created_snippets.len()),
+            action: crate::commands::undo::UndoActionDto::BulkOperation {
+                operations: undo_actions,
+            },
+        };
+
+        if let Ok(mut stack) = state.undo_stack.lock() {
+            stack.push(undo_entry);
+        }
+    }
+
+    Ok(created_snippets)
 }
 
 #[tauri::command]
@@ -625,6 +714,20 @@ pub async fn trash_snippet(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_next_copy_title() {
+        assert_eq!(next_copy_title("Mein Snippet"), "Mein Snippet (Kopie)");
+        assert_eq!(next_copy_title("Mein Snippet (Kopie)"), "Mein Snippet (Kopie 2)");
+        assert_eq!(next_copy_title("Mein Snippet (Kopie 2)"), "Mein Snippet (Kopie 3)");
+        assert_eq!(next_copy_title("Mein Snippet (Kopie 99)"), "Mein Snippet (Kopie 100)");
+        assert_eq!(next_copy_title("Foo (Kopie) Bar"), "Foo (Kopie) Bar (Kopie)");
+    }
 }
 
 #[tauri::command]
