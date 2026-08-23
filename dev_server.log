@@ -1,0 +1,16 @@
+
+> applet@0.0.1 dev
+> vite dev
+
+5:19:22 PM [vite] (client) Forced re-optimization of dependencies
+5:19:24 PM [vite] (client) [optimizer] scanning dependencies...
+5:19:25 PM [vite] (ssr) [optimizer] bundling dependencies...
+
+  VITE v8.2.1  ready in 6285 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+5:20:26 PM [vite-plugin-svelte] src/lib/components/shared/CommandPalette.svelte:75:20 Avoid using autofocus
+https://svelte.dev/e/a11y_autofocus
+5:20:31 PM [vite-plugin-svelte] src/lib/components/shared/CommandPalette.svelte:75:20 Avoid using autofocus
+https://svelte.dev/e/a11y_autofocus

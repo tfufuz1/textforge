@@ -38,6 +38,16 @@ pub struct SnippetFilterDto {
     pub size_range: Option<SizeRangeFilterDto>,
     pub sort_by: Option<String>,
     pub sort_dir: Option<String>,
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnippetListResultDto {
+    pub items: Vec<SnippetListItemDto>,
+    pub total_count: u32,
+    pub has_more: bool,
 }
 
 #[derive(Serialize)]
@@ -202,20 +212,10 @@ pub struct ScriptVersionDto {
     pub created_at: i64,
 }
 
-#[tauri::command]
-pub async fn list_snippets(
-    filter: Option<SnippetFilterDto>,
-    state: State<'_, AppState>,
-) -> Result<Vec<SnippetListItemDto>, String> {
-    let filter = filter.unwrap_or_default();
-
-    let mut query = sqlx::QueryBuilder::new(
-        "SELECT s.id, s.title, s.content, s.content_type, s.created_at, s.updated_at, s.is_pinned, s.is_favorite, s.color, GROUP_CONCAT(t.tag) as tags
-         FROM snippets s 
-         LEFT JOIN snippet_tags t ON s.id = t.snippet_id 
-         WHERE 1=1"
-    );
-
+fn apply_snippet_where_clause<'a>(
+    query: &mut sqlx::QueryBuilder<'a, sqlx::Sqlite>,
+    filter: &'a SnippetFilterDto,
+) {
     if let Some(search) = &filter.search_query {
         let formatted = crate::commands::clipboard::format_fts5_query(search);
         if !formatted.is_empty() {
@@ -312,6 +312,36 @@ pub async fn list_snippets(
             query.push_bind(max_size);
         }
     }
+}
+
+#[tauri::command]
+pub async fn list_snippets(
+    filter: Option<SnippetFilterDto>,
+    state: State<'_, AppState>,
+) -> Result<SnippetListResultDto, String> {
+    let filter = filter.unwrap_or_default();
+    let limit = filter.limit.unwrap_or(50).min(200);
+    let offset = filter.offset.unwrap_or(0);
+
+    // 1. COUNT Query
+    let mut count_query = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM snippets s WHERE 1=1");
+    apply_snippet_where_clause(&mut count_query, &filter);
+
+    let total_count: i64 = count_query
+        .build_query_scalar()
+        .fetch_one(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+    let total_count = total_count as u32;
+
+    // 2. DATA Query
+    let mut query = sqlx::QueryBuilder::new(
+        "SELECT s.id, s.title, SUBSTR(s.content, 1, 200) as preview, s.content_type, s.created_at, s.updated_at, s.is_pinned, s.is_favorite, s.color, GROUP_CONCAT(t.tag) as tags
+         FROM snippets s
+         LEFT JOIN snippet_tags t ON s.id = t.snippet_id
+         WHERE 1=1"
+    );
+    apply_snippet_where_clause(&mut query, &filter);
 
     query.push(" GROUP BY s.id");
 
@@ -329,13 +359,16 @@ pub async fn list_snippets(
     };
 
     query.push(&format!(" ORDER BY s.is_pinned DESC, {} {}", sort_field, sort_dir));
-    query.push(" LIMIT 100");
+    query.push(" LIMIT ");
+    query.push_bind(limit as i64);
+    query.push(" OFFSET ");
+    query.push_bind(offset as i64);
 
     #[derive(sqlx::FromRow)]
     struct Row {
         id: String,
         title: String,
-        content: String,
+        preview: String,
         content_type: String,
         created_at: i64,
         updated_at: i64,
@@ -353,10 +386,11 @@ pub async fn list_snippets(
 
     let items: Vec<SnippetListItemDto> = entries.into_iter().map(|r| {
         let tags = r.tags.map(|t| t.split(',').map(|s| s.to_string()).collect()).unwrap_or_default();
+        let preview = String::from_utf8_lossy(r.preview.as_bytes()).to_string();
         SnippetListItemDto {
             id: r.id,
             title: r.title,
-            preview: r.content.chars().take(200).collect(),
+            preview,
             content_type: r.content_type,
             created_at: r.created_at,
             updated_at: r.updated_at,
@@ -367,7 +401,13 @@ pub async fn list_snippets(
         }
     }).collect();
 
-    Ok(items)
+    let has_more = (offset as u64 + items.len() as u64) < total_count as u64;
+
+    Ok(SnippetListResultDto {
+        items,
+        total_count,
+        has_more,
+    })
 }
 
 #[tauri::command]
