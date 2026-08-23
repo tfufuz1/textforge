@@ -79,3 +79,24 @@ export async function readClipboardNow(): Promise<string> {
 export async function writeToClipboard(content: string, snippetId?: string | null): Promise<void> {
     return invoke('write_to_clipboard', { content, snippet_id: snippetId ?? null });
 }
+
+export interface TransformClipboardResultDto {
+  originalContent: string;
+  transformedContent: string;
+  executionTimeMs: number;
+  error: string | null;
+}
+
+export async function transformClipboardEntry(
+  entryId: string,
+  scriptId?: string | null,
+  pipelineId?: string | null,
+  paramsJson?: string | null
+): Promise<TransformClipboardResultDto> {
+  return invoke('transform_clipboard_entry', {
+    entryId,
+    scriptId: scriptId ?? null,
+    pipelineId: pipelineId ?? null,
+    paramsJson: paramsJson ?? null,
+  });
+}

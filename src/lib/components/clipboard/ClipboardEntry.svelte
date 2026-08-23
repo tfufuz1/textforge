@@ -9,9 +9,10 @@
         entry: ClipboardEntryListItemDto;
         isSelected?: boolean;
         onToggleSelect?: (id: string) => void;
+        onTransform?: (id: string) => void;
     }
 
-    let { entry, isSelected = false, onToggleSelect }: Props = $props();
+    let { entry, isSelected = false, onToggleSelect, onTransform }: Props = $props();
 
     let isExpanded = $state(false);
 
@@ -89,6 +90,6 @@
     </div>
 
     <div class="w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60 flex justify-end">
-        <ClipboardEntryActions {entry} />
+        <ClipboardEntryActions {entry} {onTransform} />
     </div>
 </div>

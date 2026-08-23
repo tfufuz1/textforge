@@ -1033,6 +1033,69 @@ pub async fn remove_pipeline_step(
     Ok(())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransformClipboardResultDto {
+    pub original_content: String,
+    pub transformed_content: String,
+    pub execution_time_ms: u32,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn transform_clipboard_entry(
+    entry_id: String,
+    script_id: Option<String>,
+    pipeline_id: Option<String>,
+    params_json: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<TransformClipboardResultDto, String> {
+    let original_content: String = sqlx::query_scalar("SELECT content FROM clipboard_history WHERE id = ?")
+        .bind(&entry_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("Clipboard entry '{}' not found", entry_id))?;
+
+    if let Some(pipe_id) = pipeline_id {
+        let res = run_pipeline(pipe_id, original_content.clone(), state).await?;
+        let err = if !res.is_success {
+            let error_step = res.step_results.iter().find(|s| s.error.is_some());
+            error_step.and_then(|s| s.error.clone()).or_else(|| Some("Pipeline execution failed".to_string()))
+        } else {
+            None
+        };
+        Ok(TransformClipboardResultDto {
+            original_content,
+            transformed_content: res.final_output,
+            execution_time_ms: res.total_time_ms,
+            error: err,
+        })
+    } else if let Some(s_id) = script_id {
+        let res = execute_script(
+            ExecuteScriptDto {
+                script_id: Some(s_id),
+                js_code: None,
+                regex_pattern: None,
+                regex_replacement: None,
+                regex_flags: None,
+                input: original_content.clone(),
+                params_json,
+            },
+            state,
+        )
+        .await?;
+        Ok(TransformClipboardResultDto {
+            original_content,
+            transformed_content: res.output,
+            execution_time_ms: res.execution_time_ms,
+            error: res.error,
+        })
+    } else {
+        Err("Neither script_id nor pipeline_id provided".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

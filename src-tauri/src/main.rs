@@ -117,6 +117,7 @@ async fn main() {
             commands::transform::remove_pipeline_step,
             commands::transform::reorder_pipeline_steps,
             commands::transform::toggle_pipeline_step,
+            commands::transform::transform_clipboard_entry,
 
             // STATUS: Implemented (Phase 4 - Import/Export IPC Commands)
             commands::import_export::export_data,
