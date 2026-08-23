@@ -352,11 +352,13 @@ mod tests {
     async fn test_render_sequence_mixed_and_missing_refs() {
         let db = crate::db::init_db(std::path::Path::new(":memory:")).await.unwrap();
 
-        let app_state = Box::leak(Box::new(AppState {
+        use tauri::Manager;
+        let app = tauri::test::mock_app();
+        app.manage(AppState {
             db: db.clone(),
             undo_stack: std::sync::Mutex::new(crate::commands::undo::UndoStack::new()),
-        }));
-        let state = State::from(&*app_state);
+        });
+        let state = app.state::<AppState>();
 
         // Insert a snippet
         let snippet_id = uuid::Uuid::new_v4().to_string();

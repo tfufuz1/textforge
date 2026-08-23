@@ -1,19 +1,81 @@
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use base64::{Engine as _, engine::general_purpose};
+use regex::Regex;
+
+pub struct BuiltinRegexes {
+    pub whitespace: Regex,
+    pub spaces: Regex,
+    pub line_numbers: Regex,
+    pub md_link: Regex,
+    pub md_heading: Regex,
+    pub md_bold_inline: Regex,
+    pub html_tags: Regex,
+    pub code_blocks: Regex,
+    pub comment_line: Regex,
+    pub comment_block: Regex,
+    pub url_component_unreserved: Regex,
+    pub camel_boundary: Regex,
+    pub non_alphanumeric_space_dash: Regex,
+    pub whitespace_underscore: Regex,
+    pub whitespace_dash: Regex,
+    pub email: Regex,
+    pub url: Regex,
+    pub number: Regex,
+    pub md_headings: Regex,
+    pub extract_errors: Regex,
+    pub redact_ip: Regex,
+    pub redact_key: Regex,
+    pub phone: Regex,
+    pub md_inline_bold: Regex,
+    pub md_inline_italic: Regex,
+    pub md_inline_code: Regex,
+}
+
+static REGEXES: OnceLock<BuiltinRegexes> = OnceLock::new();
+
+pub fn regexes() -> &'static BuiltinRegexes {
+    REGEXES.get_or_init(|| BuiltinRegexes {
+        whitespace: Regex::new(r"\s+").unwrap(),
+        spaces: Regex::new(r" +").unwrap(),
+        line_numbers: Regex::new(r"(?m)^\s*\d+[:.)\s]\s*").unwrap(),
+        md_link: Regex::new(r"\[([^\]]+)\]\([^)]+\)").unwrap(),
+        md_heading: Regex::new(r"(?m)^#+\s+").unwrap(),
+        md_bold_inline: Regex::new(r"\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`").unwrap(),
+        html_tags: Regex::new(r"<[^>]*>").unwrap(),
+        code_blocks: Regex::new(r"(?s)```[a-zA-Z0-9_-]*\n?(.*?)```").unwrap(),
+        comment_line: Regex::new(r"(?m)^\s*(//|#).*$").unwrap(),
+        comment_block: Regex::new(r"(?s)/\*.*?\*/").unwrap(),
+        url_component_unreserved: Regex::new(r"[^a-zA-Z0-9\-_.~]").unwrap(),
+        camel_boundary: Regex::new(r"([a-z0-9])([A-Z])").unwrap(),
+        non_alphanumeric_space_dash: Regex::new(r"[^a-zA-Z0-9\s-]").unwrap(),
+        whitespace_underscore: Regex::new(r"[\s_]+").unwrap(),
+        whitespace_dash: Regex::new(r"[\s-]+").unwrap(),
+        email: Regex::new(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}").unwrap(),
+        url: Regex::new(r#"https?://[^\s<>"']+"#).unwrap(),
+        number: Regex::new(r"-?\d+(\.\d+)?").unwrap(),
+        md_headings: Regex::new(r"(?m)^(#{1,6})\s+(.+)$").unwrap(),
+        extract_errors: Regex::new(r"(?i)(error|exception|failed|fatal|traceback|panic|at\s+[\w\./\\]+:\d+)").unwrap(),
+        redact_ip: Regex::new(r"\b(?:\d{1,3}\.){3}\d{1,3}\b").unwrap(),
+        redact_key: Regex::new(r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*\S+").unwrap(),
+        phone: Regex::new(r"\b[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{2,4}[-\s\.]?[0-9]{2,4}[-\s\.]?[0-9]{0,4}\b").unwrap(),
+        md_inline_bold: Regex::new(r"\*\*(.+?)\*\*").unwrap(),
+        md_inline_italic: Regex::new(r"\*(.+?)\*").unwrap(),
+        md_inline_code: Regex::new(r"`(.+?)`").unwrap(),
+    })
+}
 
 pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) -> Result<String, String> {
     match id {
         "trim" => Ok(input.trim().to_string()),
         "remove_empty_lines" => Ok(input.lines().filter(|l| !l.trim().is_empty()).collect::<Vec<_>>().join("\n")),
         "collapse_whitespace" => {
-            let re = regex::Regex::new(r"\s+").unwrap();
-            Ok(re.replace_all(input, " ").trim().to_string())
+            Ok(regexes().whitespace.replace_all(input, " ").trim().to_string())
         }
         "normalize_whitespace" => {
             // Alle Whitespace-Varianten → reguläres Leerzeichen
             let result = input.chars().map(|c| if c.is_whitespace() && c != '\n' { ' ' } else { c }).collect::<String>();
-            let re = regex::Regex::new(r" +").unwrap();
-            Ok(re.replace_all(&result, " ").to_string())
+            Ok(regexes().spaces.replace_all(&result, " ").to_string())
         }
         "remove_non_ascii" => Ok(input.chars().filter(|c| c.is_ascii()).collect()),
         "truncate" => {
@@ -171,8 +233,7 @@ pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) 
             Ok(lines.join("\n"))
         }
         "remove_line_numbers" => {
-            let re = regex::Regex::new(r"(?m)^\s*\d+[:.)\s]\s*").unwrap();
-            Ok(re.replace_all(input, "").to_string())
+            Ok(regexes().line_numbers.replace_all(input, "").to_string())
         }
         "prefix_lines" => {
             let prefix = params.get("prefix").map(|s| s.as_str()).unwrap_or("> ");
@@ -213,12 +274,9 @@ pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) 
             Ok(format!("```{}\n{}\n```", lang, input))
         }
         "strip_markdown" => {
-            let re_link = regex::Regex::new(r"\[([^\]]+)\]\([^)]+\)").unwrap();
-            let s1 = re_link.replace_all(input, "$1");
-            let re_heading = regex::Regex::new(r"(?m)^#+\s+").unwrap();
-            let s2 = re_heading.replace_all(&s1, "");
-            let re_bold = regex::Regex::new(r"\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`").unwrap();
-            Ok(re_bold.replace_all(&s2, "$1$2$3").to_string())
+            let s1 = regexes().md_link.replace_all(input, "$1");
+            let s2 = regexes().md_heading.replace_all(&s1, "");
+            Ok(regexes().md_bold_inline.replace_all(&s2, "$1$2$3").to_string())
         }
         "markdown_to_html" => {
             let mut html = String::new();
@@ -252,8 +310,7 @@ pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) 
             Ok(html)
         }
         "strip_html_tags" => {
-            let re = regex::Regex::new(r"<[^>]*>").unwrap();
-            Ok(re.replace_all(input, "").to_string())
+            Ok(regexes().html_tags.replace_all(input, "").to_string())
         }
         "pretty_json" => {
             let parsed: serde_json::Value = serde_json::from_str(input).map_err(|e| format!("Invalid JSON: {}", e))?;
@@ -270,8 +327,7 @@ pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) 
             Ok(keys.join("\n"))
         }
         "extract_code_blocks" => {
-            let re = regex::Regex::new(r"(?s)```[a-zA-Z0-9_-]*\n?(.*?)```").unwrap();
-            let blocks: Vec<String> = re.captures_iter(input).map(|c| c[1].trim().to_string()).collect();
+            let blocks: Vec<String> = regexes().code_blocks.captures_iter(input).map(|c| c[1].trim().to_string()).collect();
             Ok(blocks.join("\n\n---\n\n"))
         }
         "escape_json_string" => {
@@ -283,10 +339,8 @@ pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) 
             serde_json::from_str::<String>(&quoted).map_err(|e| e.to_string())
         }
         "remove_comments" => {
-            let re_line = regex::Regex::new(r"(?m)^\s*(//|#).*$").unwrap();
-            let s1 = re_line.replace_all(input, "");
-            let re_block = regex::Regex::new(r"(?s)/\*.*?\*/").unwrap();
-            Ok(re_block.replace_all(&s1, "").to_string())
+            let s1 = regexes().comment_line.replace_all(input, "");
+            Ok(regexes().comment_block.replace_all(&s1, "").to_string())
         }
 
         // ── Kodierung/Dekodierung ─────────────────────────────────────────
@@ -297,8 +351,7 @@ pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) 
         }
         "url_encode" => Ok(urlencoding::encode(input).to_string()),
         "url_encode_component" => {
-            let re = regex::Regex::new(r"[^a-zA-Z0-9\-_.~]").unwrap();
-            Ok(re.replace_all(input, |caps: &regex::Captures| {
+            Ok(regexes().url_component_unreserved.replace_all(input, |caps: &regex::Captures| {
                 caps[0].bytes().map(|b| format!("%{:02X}", b)).collect::<String>()
             }).to_string())
         }
@@ -330,8 +383,7 @@ pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) 
 
         // ── Namenskonventionen ────────────────────────────────────────────
         "camel_to_snake" => {
-            let re = regex::Regex::new(r"([a-z0-9])([A-Z])").unwrap();
-            Ok(re.replace_all(input, "${1}_${2}").to_lowercase())
+            Ok(regexes().camel_boundary.replace_all(input, "${1}_${2}").to_lowercase())
         }
         "snake_to_camel" => {
             let mut result = String::new();
@@ -354,43 +406,33 @@ pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) 
             Ok(result)
         }
         "to_slug" => {
-            let re = regex::Regex::new(r"[^a-zA-Z0-9\s-]").unwrap();
-            let clean = re.replace_all(input, "").to_lowercase();
-            let re_spaces = regex::Regex::new(r"[\s_]+").unwrap();
-            Ok(re_spaces.replace_all(&clean, "-").trim_matches('-').to_string())
+            let clean = regexes().non_alphanumeric_space_dash.replace_all(input, "").to_lowercase();
+            Ok(regexes().whitespace_underscore.replace_all(&clean, "-").trim_matches('-').to_string())
         }
         "to_kebab_case" => {
-            let re = regex::Regex::new(r"([a-z0-9])([A-Z])").unwrap();
-            let s = re.replace_all(input, "${1}-${2}").to_lowercase();
-            let re2 = regex::Regex::new(r"[\s_]+").unwrap();
-            Ok(re2.replace_all(&s, "-").trim_matches('-').to_string())
+            let s = regexes().camel_boundary.replace_all(input, "${1}-${2}").to_lowercase();
+            Ok(regexes().whitespace_underscore.replace_all(&s, "-").trim_matches('-').to_string())
         }
         "to_constant_case" => {
-            let re = regex::Regex::new(r"([a-z0-9])([A-Z])").unwrap();
-            let s = re.replace_all(input, "${1}_${2}").to_uppercase();
-            let re2 = regex::Regex::new(r"[\s-]+").unwrap();
-            Ok(re2.replace_all(&s, "_").trim_matches('_').to_string())
+            let s = regexes().camel_boundary.replace_all(input, "${1}_${2}").to_uppercase();
+            Ok(regexes().whitespace_dash.replace_all(&s, "_").trim_matches('_').to_string())
         }
 
         // ── Extraktion ────────────────────────────────────────────────────
         "extract_emails" => {
-            let re = regex::Regex::new(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}").unwrap();
-            let emails: Vec<&str> = re.find_iter(input).map(|m| m.as_str()).collect();
+            let emails: Vec<&str> = regexes().email.find_iter(input).map(|m| m.as_str()).collect();
             Ok(emails.join("\n"))
         }
         "extract_urls" => {
-            let re = regex::Regex::new(r#"https?://[^\s<>"']+"#).unwrap();
-            let urls: Vec<&str> = re.find_iter(input).map(|m| m.as_str()).collect();
+            let urls: Vec<&str> = regexes().url.find_iter(input).map(|m| m.as_str()).collect();
             Ok(urls.join("\n"))
         }
         "extract_numbers" => {
-            let re = regex::Regex::new(r"-?\d+(\.\d+)?").unwrap();
-            let nums: Vec<&str> = re.find_iter(input).map(|m| m.as_str()).collect();
+            let nums: Vec<&str> = regexes().number.find_iter(input).map(|m| m.as_str()).collect();
             Ok(nums.join("\n"))
         }
         "extract_markdown_headings" => {
-            let re = regex::Regex::new(r"(?m)^(#{1,6})\s+(.+)$").unwrap();
-            let headings: Vec<String> = re.captures_iter(input)
+            let headings: Vec<String> = regexes().md_headings.captures_iter(input)
                 .map(|c| format!("{} {}", &c[1], &c[2]))
                 .collect();
             Ok(headings.join("\n"))
@@ -518,7 +560,7 @@ pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) 
             if pattern.is_empty() {
                 return Err("Parameter 'pattern' ist erforderlich.".to_string());
             }
-            match regex::Regex::new(pattern) {
+            match Regex::new(pattern) {
                 Ok(re) => {
                     let count = re.find_iter(input).count();
                     Ok(format!("{}\\n\\n--- Treffer für '{}': {} ---", input, pattern, count))
@@ -613,14 +655,11 @@ pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) 
         }
         "minify_code" => {
             let s1 = input.lines().filter(|l| !l.trim().is_empty()).collect::<Vec<_>>().join("\n");
-            let re_line = regex::Regex::new(r"(?m)^\s*(//|#).*$").unwrap();
-            let s2 = re_line.replace_all(&s1, "");
-            let re_block = regex::Regex::new(r"(?s)/\*.*?\*/").unwrap();
-            Ok(re_block.replace_all(&s2, "").to_string())
+            let s2 = regexes().comment_line.replace_all(&s1, "");
+            Ok(regexes().comment_block.replace_all(&s2, "").to_string())
         }
         "extract_errors" => {
-            let re = regex::Regex::new(r"(?i)(error|exception|failed|fatal|traceback|panic|at\s+[\w\./\\]+:\d+)").unwrap();
-            let matches: Vec<&str> = input.lines().filter(|l| re.is_match(l)).collect();
+            let matches: Vec<&str> = input.lines().filter(|l| regexes().extract_errors.is_match(l)).collect();
             Ok(matches.join("\n"))
         }
 
@@ -766,17 +805,13 @@ pub fn execute_builtin(id: &str, input: &str, params: &HashMap<String, String>) 
 
         // ── Sicherheit ────────────────────────────────────────────────────
         "redact_sensitive" => {
-            let re_ip = regex::Regex::new(r"\b(?:\d{1,3}\.){3}\d{1,3}\b").unwrap();
-            let re_key = regex::Regex::new(r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*\S+").unwrap();
-            let s1 = re_ip.replace_all(input, "[REDACTED-IP]");
-            let s2 = re_key.replace_all(&s1, "$1: [REDACTED]");
+            let s1 = regexes().redact_ip.replace_all(input, "[REDACTED-IP]");
+            let s2 = regexes().redact_key.replace_all(&s1, "$1: [REDACTED]");
             Ok(s2.to_string())
         }
         "strip_pii" => {
-            let re_email = regex::Regex::new(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}").unwrap();
-            let re_phone = regex::Regex::new(r"\b[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{2,4}[-\s\.]?[0-9]{2,4}[-\s\.]?[0-9]{0,4}\b").unwrap();
-            let s1 = re_email.replace_all(input, "[EMAIL]");
-            let s2 = re_phone.replace_all(&s1, "[PHONE]");
+            let s1 = regexes().email.replace_all(input, "[EMAIL]");
+            let s2 = regexes().phone.replace_all(&s1, "[PHONE]");
             Ok(s2.to_string())
         }
 
@@ -791,12 +826,9 @@ fn html_escape(s: &str) -> String {
 
 /// Inline-Markdown-Konvertierung für Fett, Kursiv, Code
 fn inline_markdown(s: &str) -> String {
-    let re_bold = regex::Regex::new(r"\*\*(.+?)\*\*").unwrap();
-    let re_italic = regex::Regex::new(r"\*(.+?)\*").unwrap();
-    let re_code = regex::Regex::new(r"`(.+?)`").unwrap();
-    let s1 = re_bold.replace_all(s, "<strong>$1</strong>");
-    let s2 = re_italic.replace_all(&s1, "<em>$1</em>");
-    re_code.replace_all(&s2, "<code>$1</code>").to_string()
+    let s1 = regexes().md_inline_bold.replace_all(s, "<strong>$1</strong>");
+    let s2 = regexes().md_inline_italic.replace_all(&s1, "<em>$1</em>");
+    regexes().md_inline_code.replace_all(&s2, "<code>$1</code>").to_string()
 }
 
 /// Rekursive JSON-Key-Extraktion
@@ -896,5 +928,92 @@ fn json_to_yaml_fmt(val: &serde_json::Value, out: &mut String, indent: usize) {
         }
         serde_json::Value::String(s) => out.push_str(&format!("{}\"{}\"\n", pad, s)),
         other => out.push_str(&format!("{}{}\n", pad, other)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    #[test]
+    fn test_static_regex_singleton_address() {
+        let ptr1 = std::ptr::addr_of!(regexes().whitespace);
+        let ptr2 = std::ptr::addr_of!(regexes().whitespace);
+        assert_eq!(ptr1, ptr2, "Regex instance should be compiled only once and cached at the same memory address");
+
+        let email_ptr1 = std::ptr::addr_of!(regexes().email);
+        let email_ptr2 = std::ptr::addr_of!(regexes().email);
+        assert_eq!(email_ptr1, email_ptr2);
+    }
+
+    #[test]
+    fn test_builtin_transformations() {
+        let params = HashMap::new();
+
+        let res = execute_builtin("collapse_whitespace", "hello    world \n  test", &params).unwrap();
+        assert_eq!(res, "hello world test");
+
+        let res = execute_builtin("strip_markdown", "# Heading\n[Link](http://a.com) and **bold** text", &params).unwrap();
+        assert_eq!(res, "Heading\nLink and bold text");
+
+        let res = execute_builtin("redact_sensitive", "Server 192.168.1.100 api_key=secret123", &params).unwrap();
+        assert_eq!(res, "Server [REDACTED-IP] api_key: [REDACTED]");
+
+        let res = execute_builtin("strip_pii", "Mail user@test.com call 049 123 45678", &params).unwrap();
+        assert_eq!(res, "Mail [EMAIL] call [PHONE]");
+
+        let res = execute_builtin("camel_to_snake", "myCamelCaseVar", &params).unwrap();
+        assert_eq!(res, "my_camel_case_var");
+
+        let res = execute_builtin("extract_emails", "Contact me at alice@example.com or bob@test.org", &params).unwrap();
+        assert_eq!(res, "alice@example.com\nbob@test.org");
+    }
+
+    #[test]
+    fn test_benchmark_10k_regex_builtins() {
+        let params = HashMap::new();
+        let sample_text = "# Header\nContact admin@example.com at IP 10.0.0.1 or call 05550199. Check **important** link [Docs](https://docs.org) api_key=abc12345.";
+        let iterations = 1_000;
+
+        // 1. Measure without caching (re-compiling regexes on each call)
+        let start_unoptimized = Instant::now();
+        for _ in 0..iterations {
+            let re_ws = regex::Regex::new(r"\s+").unwrap();
+            let _ = re_ws.replace_all(sample_text, " ").trim().to_string();
+
+            let re_link = regex::Regex::new(r"\[([^\]]+)\]\([^)]+\)").unwrap();
+            let s1 = re_link.replace_all(sample_text, "$1");
+            let re_heading = regex::Regex::new(r"(?m)^#+\s+").unwrap();
+            let s2 = re_heading.replace_all(&s1, "");
+            let re_bold = regex::Regex::new(r"\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`").unwrap();
+            let _ = re_bold.replace_all(&s2, "$1$2$3").to_string();
+
+            let re_ip = regex::Regex::new(r"\b(?:\d{1,3}\.){3}\d{1,3}\b").unwrap();
+            let re_key = regex::Regex::new(r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*\S+").unwrap();
+            let s1 = re_ip.replace_all(sample_text, "[REDACTED-IP]");
+            let _ = re_key.replace_all(&s1, "$1: [REDACTED]").to_string();
+        }
+        let elapsed_unoptimized = start_unoptimized.elapsed();
+
+        // 2. Measure with static cached OnceLock regexes
+        let start_cached = Instant::now();
+        for _ in 0..iterations {
+            let _ = execute_builtin("collapse_whitespace", sample_text, &params).unwrap();
+            let _ = execute_builtin("strip_markdown", sample_text, &params).unwrap();
+            let _ = execute_builtin("redact_sensitive", sample_text, &params).unwrap();
+            let _ = execute_builtin("strip_pii", sample_text, &params).unwrap();
+            let _ = execute_builtin("camel_to_snake", "sampleTextWithCamelCase", &params).unwrap();
+        }
+        let elapsed_cached = start_cached.elapsed();
+
+        println!("\n=== REGEX PERFORMANCE BENCHMARK (1,000 Iterations) ===");
+        println!("Without OnceLock (recompiling each call): {:?}", elapsed_unoptimized);
+        println!("With OnceLock (precompiled static regexes):  {:?}", elapsed_cached);
+        if elapsed_cached.as_nanos() > 0 {
+            let speedup = elapsed_unoptimized.as_secs_f64() / elapsed_cached.as_secs_f64();
+            println!("Speedup factor: {:.2}x faster", speedup);
+        }
+        println!("=========================================================\n");
     }
 }
