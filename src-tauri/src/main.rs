@@ -144,6 +144,7 @@ async fn main() {
             commands::sequences::create_sequence,
             commands::sequences::delete_sequence,
             commands::sequences::quick_combine,
+            commands::sequences::render_sequence,
 
             // STATUS: Implemented (v3.0 - Global Search & Ignore Rules)
             commands::global_search::search_all_items,

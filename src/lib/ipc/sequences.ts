@@ -43,3 +43,12 @@ export async function deleteSequence(id: string): Promise<void> {
 export async function quickCombine(texts: string[], separator?: string | null): Promise<string> {
   return invoke('quick_combine', { texts, separator });
 }
+
+export interface SequenceRenderResultDto {
+  finalOutput: string;
+  itemCount: number;
+}
+
+export async function renderSequence(sequenceId: string): Promise<SequenceRenderResultDto> {
+  return invoke('render_sequence', { sequenceId });
+}
