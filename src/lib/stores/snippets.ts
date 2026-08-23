@@ -21,6 +21,9 @@ import { refreshUndoState } from './undo';
 import { executeBulkOperation, type BulkOperation } from '../ipc/bulk';
 
 export const snippetsStore = writable<SnippetListItemDto[]>([]);
+export const totalCountStore = writable<number>(0);
+export const hasMoreStore = writable<boolean>(false);
+export const isLoadingMoreStore = writable<boolean>(false);
 export const activeSnippetStore = writable<SnippetDto | null>(null);
 export const selectedTagStore = writable<string | null>(null);
 export const selectedSnippetIdsStore = writable<Set<string>>(new Set());
@@ -86,14 +89,51 @@ export async function loadSnippets() {
     const finalFilter: SnippetFilterDto = {
         ...filter,
         tags,
-        searchQuery: filter.searchQuery?.trim() ? filter.searchQuery.trim() : null
+        searchQuery: filter.searchQuery?.trim() ? filter.searchQuery.trim() : null,
+        offset: 0,
+        limit: filter.limit || 50
     };
 
     try {
-        const items = await listSnippets(finalFilter);
-        snippetsStore.set(items);
+        const res = await listSnippets(finalFilter);
+        snippetsStore.set(res.items);
+        totalCountStore.set(res.totalCount);
+        hasMoreStore.set(res.hasMore);
     } catch (e) {
         console.error("Failed to load snippets:", e);
+    }
+}
+
+export async function loadMoreSnippets() {
+    if (get(isLoadingMoreStore) || !get(hasMoreStore)) return;
+    isLoadingMoreStore.set(true);
+
+    const currentItems = get(snippetsStore);
+    const filter = get(snippetFilterStore);
+    const selectedTag = get(selectedTagStore);
+
+    const tags = [...(filter.tags || [])];
+    if (selectedTag && !tags.includes(selectedTag)) {
+        tags.push(selectedTag);
+    }
+
+    const finalFilter: SnippetFilterDto = {
+        ...filter,
+        tags,
+        searchQuery: filter.searchQuery?.trim() ? filter.searchQuery.trim() : null,
+        offset: currentItems.length,
+        limit: filter.limit || 50
+    };
+
+    try {
+        const res = await listSnippets(finalFilter);
+        snippetsStore.update(items => [...items, ...res.items]);
+        totalCountStore.set(res.totalCount);
+        hasMoreStore.set(res.hasMore);
+    } catch (e) {
+        console.error("Failed to load more snippets:", e);
+    } finally {
+        isLoadingMoreStore.set(false);
     }
 }
 

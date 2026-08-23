@@ -16,6 +16,14 @@ export interface SnippetFilterDto {
   sizeRange?: { min?: number | null; max?: number | null } | null;
   sortBy?: string | null;
   sortDir?: string | null;
+  limit?: number | null;
+  offset?: number | null;
+}
+
+export interface SnippetListResultDto {
+  items: SnippetListItemDto[];
+  totalCount: number;
+  hasMore: boolean;
 }
 
 export interface SnippetListItemDto {
@@ -97,7 +105,7 @@ export interface TextStatsDto {
   readingTimeMs: number;
 }
 
-export async function listSnippets(filter?: SnippetFilterDto): Promise<SnippetListItemDto[]> {
+export async function listSnippets(filter?: SnippetFilterDto): Promise<SnippetListResultDto> {
   return invoke('list_snippets', { filter });
 }
 

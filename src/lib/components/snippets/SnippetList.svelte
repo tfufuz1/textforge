@@ -3,6 +3,10 @@
     import { listen, type UnlistenFn } from '@tauri-apps/api/event';
     import {
         snippetsStore,
+        totalCountStore,
+        hasMoreStore,
+        isLoadingMoreStore,
+        loadMoreSnippets,
         activeSnippetStore,
         snippetFilterStore,
         selectedSnippetIdsStore,
@@ -193,7 +197,7 @@
                     onchange={toggleSelectAll}
                     class="rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0"
                 />
-                <span class="font-medium text-[11px]">Alle auswählen ({$snippetsStore.length})</span>
+                <span class="font-medium text-[11px]">Alle auswählen ({$snippetsStore.length} von {$totalCountStore})</span>
             </label>
 
             {#if $selectedSnippetIdsStore.size > 0}
@@ -367,5 +371,22 @@
                 </button>
             </div>
         {/each}
+
+        {#if $hasMoreStore}
+            <div class="pt-2 pb-4 text-center">
+                <button
+                    onclick={loadMoreSnippets}
+                    disabled={$isLoadingMoreStore}
+                    class="w-full py-2 px-3 text-xs font-semibold bg-slate-900/80 hover:bg-slate-800 disabled:opacity-50 text-indigo-300 hover:text-indigo-200 border border-slate-800/80 rounded-xl transition-all shadow-sm flex items-center justify-center space-x-2"
+                >
+                    {#if $isLoadingMoreStore}
+                        <span class="animate-spin text-indigo-400">⏳</span>
+                        <span>Lade weitere...</span>
+                    {:else}
+                        <span>Mehr laden ({$snippetsStore.length} von {$totalCountStore})</span>
+                    {/if}
+                </button>
+            </div>
+        {/if}
     </div>
 </div>
