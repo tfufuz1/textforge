@@ -42,6 +42,7 @@ async fn main() {
                 app_handle.manage(AppState {
                     db: db.clone(),
                     undo_stack: Mutex::new(commands::undo::UndoStack::new()),
+                    regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
                 });
 
                 // STATUS: Implemented (Phase 1 - Wayland/arboard Clipboard Monitor)

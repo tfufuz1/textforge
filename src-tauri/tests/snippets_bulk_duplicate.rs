@@ -14,6 +14,7 @@ async fn test_bulk_duplicate_200_snippets_performance_and_roundtrips() {
     app.manage(AppState {
         db: db.clone(),
         undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
+        regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
     });
     let state = app.state::<AppState>();
 
@@ -70,6 +71,7 @@ async fn test_bulk_duplicate_partial_success_with_invalid_id() {
     app.manage(AppState {
         db: db.clone(),
         undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
+        regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
     });
     let state = app.state::<AppState>();
 
@@ -107,6 +109,7 @@ async fn test_bulk_duplicate_with_target_folder() {
     app.manage(AppState {
         db: db.clone(),
         undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
+        regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
     });
     let state = app.state::<AppState>();
 
@@ -158,6 +161,7 @@ async fn test_bulk_duplicate_multiple_same_snippet_unique_titles() {
     app.manage(AppState {
         db: db.clone(),
         undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
+        regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
     });
     let state = app.state::<AppState>();
 

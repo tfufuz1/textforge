@@ -14,6 +14,7 @@ async fn test_list_snippets_pagination_and_preview() {
     app.manage(AppState {
         db: db.clone(),
         undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
+        regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
     });
     let state = app.state::<AppState>();
 

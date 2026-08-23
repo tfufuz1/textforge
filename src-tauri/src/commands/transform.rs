@@ -1,9 +1,18 @@
 use std::collections::HashMap;
+use std::sync::Mutex;
+use std::time::Duration;
+use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use crate::AppState;
 use crate::sandbox::{run_script_in_sandbox, ScriptExecutionResultDto};
 use crate::commands::builtins;
+
+/// Timeout for regex execution (2000 ms limit).
+const REGEX_TIMEOUT: Duration = Duration::from_millis(2000);
+
+/// Maximum input size for regex execution (2 MB as per spec).
+const MAX_REGEX_INPUT_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -72,7 +81,7 @@ pub async fn execute_script(
             let replacement = row.regex_replacement.unwrap_or_default();
             let flags = row.regex_flags;
             let params_str = req.params_json.unwrap_or(row.parameters_json);
-            return Ok(run_regex_transformation(&req.input, &pattern, &replacement, &flags, Some(&params_str), start));
+            return Ok(run_regex_transformation(&req.input, &pattern, &replacement, &flags, Some(&params_str), Some(&state.regex_cache), start).await);
         } else {
             let js_code = row.js_code.ok_or_else(|| "No JS code found".to_string())?;
             let params = req.params_json.unwrap_or(row.parameters_json);
@@ -83,7 +92,7 @@ pub async fn execute_script(
     if let Some(pattern) = req.regex_pattern {
         let replacement = req.regex_replacement.unwrap_or_default();
         let flags = req.regex_flags.unwrap_or_else(|| "g".to_string());
-        return Ok(run_regex_transformation(&req.input, &pattern, &replacement, &flags, req.params_json.as_deref(), start));
+        return Ok(run_regex_transformation(&req.input, &pattern, &replacement, &flags, req.params_json.as_deref(), Some(&state.regex_cache), start).await);
     }
 
     let js_code = req.js_code.ok_or_else(|| "Neither scriptId, regexPattern nor jsCode provided".to_string())?;
@@ -109,48 +118,119 @@ fn substitute_params(text: &str, params_json: Option<&str>) -> String {
     result
 }
 
-fn run_regex_transformation(
+pub async fn run_regex_transformation(
     input: &str,
     pattern: &str,
     replacement: &str,
     flags: &str,
     params_json: Option<&str>,
+    regex_cache: Option<&Mutex<LruCache<(String, String), regex::Regex>>>,
     start: std::time::Instant,
 ) -> ScriptExecutionResultDto {
+    // Input size check before compiling or running regex
+    if input.len() > MAX_REGEX_INPUT_BYTES {
+        let elapsed = start.elapsed().as_millis() as u32;
+        return ScriptExecutionResultDto {
+            output: input.to_string(),
+            execution_time_ms: elapsed,
+            console_logs: vec![],
+            error: Some(format!(
+                "Input size ({} bytes) exceeds maximum limit ({} bytes)",
+                input.len(),
+                MAX_REGEX_INPUT_BYTES
+            )),
+        };
+    }
+
     let sub_pattern = substitute_params(pattern, params_json);
     let sub_replacement = substitute_params(replacement, params_json);
 
-    let mut builder = regex::RegexBuilder::new(&sub_pattern);
-    if flags.contains('i') {
-        builder.case_insensitive(true);
-    }
-    if flags.contains('m') {
-        builder.multi_line(true);
-    }
-    if flags.contains('s') {
-        builder.dot_matches_new_line(true);
-    }
+    // Form cache key AFTER parameter substitution
+    let cache_key = (sub_pattern.clone(), flags.to_string());
 
-    match builder.build() {
-        Ok(re) => {
-            let output = re.replace_all(input, sub_replacement.as_str()).to_string();
-            let elapsed = start.elapsed().as_millis() as u32;
-            ScriptExecutionResultDto {
-                output,
-                execution_time_ms: elapsed,
-                console_logs: vec![],
-                error: None,
+    let cached_re = if let Some(cache_mutex) = regex_cache {
+        let mut cache = cache_mutex.lock().unwrap();
+        cache.get(&cache_key).cloned()
+    } else {
+        None
+    };
+
+    let re = match cached_re {
+        Some(re) => re,
+        None => {
+            let mut builder = regex::RegexBuilder::new(&sub_pattern);
+            if flags.contains('i') {
+                builder.case_insensitive(true);
+            }
+            if flags.contains('m') {
+                builder.multi_line(true);
+            }
+            if flags.contains('s') {
+                builder.dot_matches_new_line(true);
+            }
+
+            match builder.build() {
+                Ok(compiled) => {
+                    if let Some(cache_mutex) = regex_cache {
+                        let mut cache = cache_mutex.lock().unwrap();
+                        cache.put(cache_key, compiled.clone());
+                    }
+                    compiled
+                }
+                Err(e) => {
+                    let elapsed = start.elapsed().as_millis() as u32;
+                    return ScriptExecutionResultDto {
+                        output: input.to_string(),
+                        execution_time_ms: elapsed,
+                        console_logs: vec![],
+                        error: Some(format!("Invalid RegEx pattern: {}", e)),
+                    };
+                }
             }
         }
-        Err(e) => {
-            let elapsed = start.elapsed().as_millis() as u32;
-            ScriptExecutionResultDto {
-                output: input.to_string(),
-                execution_time_ms: elapsed,
-                console_logs: vec![],
-                error: Some(format!("Invalid RegEx pattern: {}", e)),
+    };
+
+    let input_owned = input.to_string();
+    let flags_owned = flags.to_string();
+
+    let exec_result = tokio::time::timeout(
+        REGEX_TIMEOUT,
+        tokio::task::spawn_blocking(move || {
+            // Flag 'g' handling:
+            // If `flags` contains 'g', `replace_all` is used to replace all occurrences.
+            // If 'g' is absent (e.g. empty flags "" or non-global flags like "i"), `replacen(..., 1, ...)`
+            // is used to replace only the first occurrence.
+            // Default behavior in Spec § 3.4 and DB schema is 'g' (global replacement).
+            if flags_owned.contains('g') {
+                re.replace_all(&input_owned, sub_replacement.as_str()).to_string()
+            } else {
+                re.replacen(&input_owned, 1, sub_replacement.as_str()).to_string()
             }
-        }
+        }),
+    )
+    .await;
+
+    let elapsed = start.elapsed().as_millis() as u32;
+
+    match exec_result {
+        Ok(Ok(output)) => ScriptExecutionResultDto {
+            output,
+            execution_time_ms: elapsed,
+            console_logs: vec![],
+            error: None,
+        },
+        Ok(Err(join_err)) => ScriptExecutionResultDto {
+            output: input.to_string(),
+            execution_time_ms: elapsed,
+            console_logs: vec![],
+            error: Some(format!("RegEx thread panicked: {}", join_err)),
+        },
+        Err(_) => ScriptExecutionResultDto {
+            output: input.to_string(),
+            execution_time_ms: elapsed,
+            console_logs: vec![],
+            error: Some("RegEx-Ausführung hat das Zeitlimit überschritten — Pattern könnte pathologisches Backtracking verursachen".to_string()),
+        },
     }
 }
 
@@ -530,6 +610,35 @@ pub async fn get_script(
     })
 }
 
+/// Validates regex pattern compilation before saving/updating a script.
+/// Parameter placeholders `{{...}}` are substituted with dummy text during testing.
+pub fn validate_regex_pattern(pattern: &str, flags: &str) -> Result<(), String> {
+    let test_pattern = substitute_dummy_params(pattern);
+    let mut builder = regex::RegexBuilder::new(&test_pattern);
+    if flags.contains('i') {
+        builder.case_insensitive(true);
+    }
+    if flags.contains('m') {
+        builder.multi_line(true);
+    }
+    if flags.contains('s') {
+        builder.dot_matches_new_line(true);
+    }
+
+    builder
+        .build()
+        .map_err(|e| format!("Ungültiges RegEx-Muster: {}", e))?;
+    Ok(())
+}
+
+fn substitute_dummy_params(pattern: &str) -> String {
+    if let Ok(re) = regex::Regex::new(r"\{\{.*?\}\}") {
+        re.replace_all(pattern, "dummy").to_string()
+    } else {
+        pattern.to_string()
+    }
+}
+
 #[tauri::command]
 pub async fn create_script(
     draft: CreateScriptDto,
@@ -544,6 +653,12 @@ pub async fn create_script(
     let color = draft.color.unwrap_or_else(|| "#6366f1".to_string());
     let parameters = draft.parameters_json.unwrap_or_else(|| "[]".to_string());
     let tags = draft.tags_json.unwrap_or_else(|| "[]".to_string());
+
+    if stype == "regex" {
+        if let Some(ref pattern) = draft.regex_pattern {
+            validate_regex_pattern(pattern, &flags)?;
+        }
+    }
 
     sqlx::query(
         "INSERT INTO scripts (id, name, description, script_type, category, js_code, regex_pattern, regex_replacement, regex_flags, color, parameters_json, tags_json, created_at, updated_at)
@@ -599,6 +714,12 @@ pub async fn update_script(
     let color = draft.color.unwrap_or(existing.color);
     let parameters_json = draft.parameters_json.unwrap_or(existing.parameters_json);
     let tags_json = draft.tags_json.unwrap_or(existing.tags_json);
+
+    if script_type == "regex" {
+        if let Some(ref pattern) = regex_pattern {
+            validate_regex_pattern(pattern, &regex_flags)?;
+        }
+    }
 
     sqlx::query(
         "UPDATE scripts SET name = ?, description = ?, script_type = ?, category = ?, js_code = ?, regex_pattern = ?, regex_replacement = ?, regex_flags = ?, is_favorite = ?, color = ?, parameters_json = ?, tags_json = ?, updated_at = ? WHERE id = ?"
@@ -910,6 +1031,104 @@ pub async fn remove_pipeline_step(
         .await
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::num::NonZeroUsize;
+    use std::sync::Mutex;
+    use lru::LruCache;
+
+    #[tokio::test]
+    async fn test_regex_g_flag_global_vs_first_only() {
+        let start = std::time::Instant::now();
+        let input = "foo bar foo baz foo";
+
+        // With 'g' flag -> replace all
+        let res_g = run_regex_transformation(input, "foo", "QUX", "g", None, None, start).await;
+        assert_eq!(res_g.output, "QUX bar QUX baz QUX");
+        assert!(res_g.error.is_none());
+
+        // Without 'g' flag (e.g. empty or "i") -> replace first occurrence only
+        let res_nog = run_regex_transformation(input, "foo", "QUX", "", None, None, start).await;
+        assert_eq!(res_nog.output, "QUX bar foo baz foo");
+        assert!(res_nog.error.is_none());
+
+        let res_i = run_regex_transformation(input, "FOO", "QUX", "i", None, None, start).await;
+        assert_eq!(res_i.output, "QUX bar foo baz foo");
+        assert!(res_i.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_regex_input_size_limit() {
+        let start = std::time::Instant::now();
+        let large_input = "a".repeat(MAX_REGEX_INPUT_BYTES + 1);
+
+        let res = run_regex_transformation(&large_input, "a", "b", "g", None, None, start).await;
+        assert!(res.error.is_some());
+        let err_msg = res.error.unwrap();
+        assert!(err_msg.contains("exceeds maximum limit"));
+    }
+
+    #[tokio::test]
+    async fn test_regex_redos_timeout() {
+        let start = std::time::Instant::now();
+        // Heavy replacement workload on a large input (1.9 MB)
+        let input = "a".repeat(1_900_000);
+        let pattern = "a?";
+        let replacement = "abcdefghijklmnopqrstuvwxyz1234567890";
+
+        let res = run_regex_transformation(&input, pattern, replacement, "g", None, None, start).await;
+        assert!(res.error.is_some());
+        let err_msg = res.error.unwrap();
+        assert!(err_msg.contains("Zeitlimit überschritten"));
+    }
+
+    #[tokio::test]
+    async fn test_regex_caching() {
+        let start = std::time::Instant::now();
+        let cache = Mutex::new(LruCache::new(NonZeroUsize::new(10).unwrap()));
+
+        let pattern = "foo";
+        let input = "foo bar";
+
+        // First call -> Cache Miss & Compiles
+        let res1 = run_regex_transformation(input, pattern, "baz", "g", None, Some(&cache), start).await;
+        assert_eq!(res1.output, "baz bar");
+        assert_eq!(cache.lock().unwrap().len(), 1);
+
+        // Second call with same pattern & flags -> Cache Hit
+        let res2 = run_regex_transformation(input, pattern, "qux", "g", None, Some(&cache), start).await;
+        assert_eq!(res2.output, "qux bar");
+        assert_eq!(cache.lock().unwrap().len(), 1);
+
+        // Call with parameter substitution -> Cache key formed after substitution
+        let param_pattern = "hello {{target}}";
+        let params_str1 = r#"{"target": "world"}"#;
+        let params_str2 = r#"{"target": "there"}"#;
+
+        run_regex_transformation("hello world", param_pattern, "hi", "g", Some(params_str1), Some(&cache), start).await;
+        assert_eq!(cache.lock().unwrap().len(), 2); // "hello world" cached
+
+        run_regex_transformation("hello world", param_pattern, "hi", "g", Some(params_str1), Some(&cache), start).await;
+        assert_eq!(cache.lock().unwrap().len(), 2); // Hit for "hello world"
+
+        run_regex_transformation("hello there", param_pattern, "hi", "g", Some(params_str2), Some(&cache), start).await;
+        assert_eq!(cache.lock().unwrap().len(), 3); // "hello there" cached
+    }
+
+    #[test]
+    fn test_validate_regex_pattern() {
+        // Valid patterns
+        assert!(validate_regex_pattern(r"\d+", "g").is_ok());
+        assert!(validate_regex_pattern("(?i)hello {{name}}", "g").is_ok());
+
+        // Invalid pattern
+        let err = validate_regex_pattern("[a-z", "g");
+        assert!(err.is_err());
+        assert!(err.unwrap_err().contains("Ungültiges RegEx-Muster"));
+    }
 }
 
 #[tauri::command]

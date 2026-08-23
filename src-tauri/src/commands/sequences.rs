@@ -357,6 +357,7 @@ mod tests {
         app.manage(AppState {
             db: db.clone(),
             undo_stack: std::sync::Mutex::new(crate::commands::undo::UndoStack::new()),
+            regex_cache: std::sync::Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
         });
         let state = app.state::<AppState>();
 

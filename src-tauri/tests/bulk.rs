@@ -29,6 +29,7 @@ async fn test_bulk_transform_pipeline_error_partial_success() {
     app.manage(AppState {
         db: db.clone(),
         undo_stack: Mutex::new(UndoStack::new()),
+        regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
     });
 
     let state = app.state::<AppState>();
@@ -84,6 +85,7 @@ async fn test_bulk_export_progress_and_transaction() {
     app.manage(AppState {
         db: db.clone(),
         undo_stack: Mutex::new(UndoStack::new()),
+        regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
     });
 
     let state = app.state::<AppState>();
