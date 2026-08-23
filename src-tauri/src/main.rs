@@ -85,6 +85,7 @@ async fn main() {
             commands::snippets::compute_text_stats,
             commands::snippets::parse_template,
             commands::snippets::render_template,
+            commands::snippets::preview_template_variables_for_selection,
             commands::snippets::compute_diff,
             commands::snippets::save_script_version,
             commands::snippets::list_script_versions,

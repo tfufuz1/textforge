@@ -208,3 +208,23 @@ export async function parseTemplate(content: string): Promise<ParsedTemplateDto>
 export async function renderTemplate(content: string, context: Record<string, string>, strict: boolean): Promise<TemplateRenderResultDto> {
   return invoke('render_template', { content, context, strict });
 }
+
+export interface AggregatedTemplateVariableDto {
+  name: string;
+  hasDefault: boolean;
+  defaultVal: string | null;
+  filter: string | null;
+  isSpecial: boolean;
+  isRequired: boolean;
+  occurrences: number;
+  snippetCount: number;
+}
+
+export interface AggregatedTemplatePreviewDto {
+  variables: AggregatedTemplateVariableDto[];
+  totalSnippets: number;
+}
+
+export async function previewTemplateVariablesForSelection(snippetIds: string[]): Promise<AggregatedTemplatePreviewDto> {
+  return invoke('preview_template_variables_for_selection', { snippetIds });
+}

@@ -14,6 +14,16 @@ const REGEX_TIMEOUT: Duration = Duration::from_millis(2000);
 /// Maximum input size for regex execution (2 MB as per spec).
 const MAX_REGEX_INPUT_BYTES: usize = 2 * 1024 * 1024;
 
+#[derive(sqlx::FromRow, Clone, Debug)]
+pub struct PipelineStepRow {
+    pub id: String,
+    pub label: String,
+    pub script_id: Option<String>,
+    pub enabled: i64,
+    pub failure_policy: String,
+    pub condition_json: Option<String>,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecuteScriptDto {
@@ -49,10 +59,9 @@ pub struct PipelineExecutionResultDto {
     pub skipped_steps: Vec<String>,
 }
 
-#[tauri::command]
-pub async fn execute_script(
+pub async fn execute_script_core(
     req: ExecuteScriptDto,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<ScriptExecutionResultDto, String> {
     let start = std::time::Instant::now();
 
@@ -97,6 +106,14 @@ pub async fn execute_script(
 
     let js_code = req.js_code.ok_or_else(|| "Neither scriptId, regexPattern nor jsCode provided".to_string())?;
     Ok(run_script_in_sandbox(js_code, req.input, req.params_json).await)
+}
+
+#[tauri::command]
+pub async fn execute_script(
+    req: ExecuteScriptDto,
+    state: State<'_, AppState>,
+) -> Result<ScriptExecutionResultDto, String> {
+    execute_script_core(req, &state).await
 }
 
 fn substitute_params(text: &str, params_json: Option<&str>) -> String {
@@ -299,42 +316,12 @@ fn detect_content_type_heuristic(s: &str) -> &'static str {
     "plain_text"
 }
 
-#[tauri::command]
-pub async fn run_pipeline(
-    pipeline_id: String,
+pub async fn execute_pipeline_with_steps(
+    steps: &[PipelineStepRow],
     input: String,
-    state: State<'_, AppState>,
+    state: &AppState,
 ) -> Result<PipelineExecutionResultDto, String> {
     let start = std::time::Instant::now();
-
-    let pipeline_exists = sqlx::query("SELECT 1 FROM pipelines WHERE id = ?")
-        .bind(&pipeline_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if pipeline_exists.is_none() {
-        return Err(format!("Pipeline not found: {}", pipeline_id));
-    }
-
-    #[derive(sqlx::FromRow)]
-    struct StepRow {
-        id: String,
-        label: String,
-        script_id: Option<String>,
-        enabled: i64,
-        failure_policy: String,
-        condition_json: Option<String>,
-    }
-
-    let steps = sqlx::query_as::<_, StepRow>(
-        "SELECT id, label, script_id, enabled, failure_policy, condition_json FROM pipeline_steps WHERE pipeline_id = ? ORDER BY step_order ASC"
-    )
-    .bind(&pipeline_id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| e.to_string())?;
-
     let mut current_text = input;
     let mut step_results = Vec::new();
     let mut overall_success = true;
@@ -358,7 +345,6 @@ pub async fn run_pipeline(
             None // Kein Condition → immer ausführen
         };
 
-
         // Wenn Condition false: Schritt überspringen
         if condition_result == Some(false) {
             skipped_steps.push(step.id.clone());
@@ -377,7 +363,7 @@ pub async fn run_pipeline(
 
         if let Some(script_id) = step.script_id {
             let step_start = std::time::Instant::now();
-            let res = execute_script(
+            let res = execute_script_core(
                 ExecuteScriptDto {
                     script_id: Some(script_id),
                     js_code: None,
@@ -387,7 +373,7 @@ pub async fn run_pipeline(
                     input: current_text.clone(),
                     params_json: None,
                 },
-                state.clone(),
+                state,
             )
             .await?;
 
@@ -443,6 +429,33 @@ pub async fn run_pipeline(
         is_success: overall_success,
         skipped_steps,
     })
+}
+
+#[tauri::command]
+pub async fn run_pipeline(
+    pipeline_id: String,
+    input: String,
+    state: State<'_, AppState>,
+) -> Result<PipelineExecutionResultDto, String> {
+    let pipeline_exists = sqlx::query("SELECT 1 FROM pipelines WHERE id = ?")
+        .bind(&pipeline_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if pipeline_exists.is_none() {
+        return Err(format!("Pipeline not found: {}", pipeline_id));
+    }
+
+    let steps = sqlx::query_as::<_, PipelineStepRow>(
+        "SELECT id, label, script_id, enabled, failure_policy, condition_json FROM pipeline_steps WHERE pipeline_id = ? ORDER BY step_order ASC"
+    )
+    .bind(&pipeline_id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    execute_pipeline_with_steps(&steps, input, &state).await
 }
 
 

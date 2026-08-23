@@ -264,12 +264,25 @@ pub async fn execute_bulk_operation<R: tauri::Runtime>(
             let mut preview_list = Vec::new();
             let mut undo_actions = Vec::new();
 
-            // TRANSACTION TRADE-OFF DOCUMENTATION:
-            // When save_results is true, all DB snippet updates are wrapped in a single SQLite transaction (state.db.begin()).
-            // Individual snippet pipeline/script errors or missing snippet errors do NOT fail or rollback the entire transaction,
-            // allowing valid transformations in the batch to be preserved.
-            // However, genuine DB storage errors (STORAGE_ERROR) encountered during query execution trigger a rollback of the
-            // transaction so that no partial DB state is committed if storage layer integrity is compromised.
+            // Load pipeline & steps ONCE
+            let pipeline_exists = sqlx::query("SELECT 1 FROM pipelines WHERE id = ?")
+                .bind(pipeline_id)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            if pipeline_exists.is_none() {
+                return Err(format!("Pipeline not found: {}", pipeline_id));
+            }
+
+            let steps = sqlx::query_as::<_, crate::commands::transform::PipelineStepRow>(
+                "SELECT id, label, script_id, enabled, failure_policy, condition_json FROM pipeline_steps WHERE pipeline_id = ? ORDER BY step_order ASC"
+            )
+            .bind(pipeline_id)
+            .fetch_all(&state.db)
+            .await
+            .map_err(|e| e.to_string())?;
+
             if *save_results {
                 let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
                 let mut storage_error = None;
@@ -307,14 +320,26 @@ pub async fn execute_bulk_operation<R: tauri::Runtime>(
                         }
                     };
 
-                    match crate::commands::transform::run_pipeline(
-                        pipeline_id.clone(),
+                    match crate::commands::transform::execute_pipeline_with_steps(
+                        &steps,
                         snip.content.clone(),
-                        state.clone(),
+                        state,
                     )
                     .await
                     {
                         Ok(res) => {
+                            if !res.is_success {
+                                let err_msg = res.step_results
+                                    .iter()
+                                    .find_map(|s| s.error.clone())
+                                    .unwrap_or_else(|| "Pipeline execution failed".to_string());
+                                failed.push(BulkOperationFailedDto {
+                                    id: id.clone(),
+                                    error: serde_json::json!({ "code": "PIPELINE_ERROR", "details": err_msg }),
+                                });
+                                continue;
+                            }
+
                             let now = chrono::Utc::now().timestamp_millis();
                             let update_res = sqlx::query("UPDATE snippets SET content = ?, updated_at = ? WHERE id = ?")
                                 .bind(&res.final_output)
@@ -406,14 +431,26 @@ pub async fn execute_bulk_operation<R: tauri::Runtime>(
                         }
                     };
 
-                    match crate::commands::transform::run_pipeline(
-                        pipeline_id.clone(),
+                    match crate::commands::transform::execute_pipeline_with_steps(
+                        &steps,
                         snip.content.clone(),
-                        state.clone(),
+                        state,
                     )
                     .await
                     {
                         Ok(res) => {
+                            if !res.is_success {
+                                let err_msg = res.step_results
+                                    .iter()
+                                    .find_map(|s| s.error.clone())
+                                    .unwrap_or_else(|| "Pipeline execution failed".to_string());
+                                failed.push(BulkOperationFailedDto {
+                                    id: id.clone(),
+                                    error: serde_json::json!({ "code": "PIPELINE_ERROR", "details": err_msg }),
+                                });
+                                continue;
+                            }
+
                             succeeded.push(id.clone());
                             preview_list.push(BulkOperationPreviewDto {
                                 id: id.clone(),
@@ -437,7 +474,7 @@ pub async fn execute_bulk_operation<R: tauri::Runtime>(
         BulkOperationDto::BulkExport { snippet_ids, format, output_path } => {
             let total = snippet_ids.len();
             #[derive(Serialize, sqlx::FromRow)]
-            struct SnipRow { id: String, title: String, content: String, content_type: String }
+            struct SnipRow { id: String, title: String, content: String, content_type: String, is_pinned: i64, is_favorite: i64 }
 
             let mut fetched_snippets = Vec::new();
             let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
@@ -449,7 +486,7 @@ pub async fn execute_bulk_operation<R: tauri::Runtime>(
                     current_id: id.clone(),
                 }).ok();
 
-                match sqlx::query_as::<_, SnipRow>("SELECT id, title, content, content_type FROM snippets WHERE id = ?")
+                match sqlx::query_as::<_, SnipRow>("SELECT id, title, content, content_type, is_pinned, is_favorite FROM snippets WHERE id = ?")
                     .bind(id)
                     .fetch_optional(&mut *tx)
                     .await
@@ -498,6 +535,55 @@ pub async fn execute_bulk_operation<R: tauri::Runtime>(
                         ));
                     }
                     std::fs::write(output_path, csv)
+                }
+                "bundle" | "tfbundle" => {
+                    use std::fs::File;
+                    use std::io::Write;
+                    use zip::write::FileOptions;
+                    use sha2::{Sha256, Digest};
+
+                    let write_bundle = || -> Result<(), String> {
+                        let file = File::create(output_path).map_err(|e| e.to_string())?;
+                        let mut zip = zip::ZipWriter::new(file);
+                        let options = FileOptions::<()>::default().compression_method(zip::CompressionMethod::Deflated);
+                        let mut checksums = std::collections::HashMap::new();
+
+                        zip.add_directory("snippets/", options).map_err(|e| e.to_string())?;
+                        for snip in &fetched_snippets {
+                            let json = serde_json::to_string_pretty(snip).map_err(|e| e.to_string())?;
+                            let bytes = json.as_bytes();
+                            let path = format!("snippets/{}.json", snip.id);
+                            let mut hasher = Sha256::new();
+                            hasher.update(bytes);
+                            let hash = format!("{:x}", hasher.finalize());
+                            checksums.insert(path.clone(), hash);
+
+                            zip.start_file(path, options).map_err(|e| e.to_string())?;
+                            zip.write_all(bytes).map_err(|e| e.to_string())?;
+                        }
+
+                        let now = chrono::Utc::now().timestamp_millis();
+                        let manifest = serde_json::json!({
+                            "bundleVersion": "1.0",
+                            "appVersion": "2.1.0",
+                            "bundleId": uuid::Uuid::new_v4().to_string(),
+                            "createdAt": now,
+                            "platform": "TextForge Bulk Export",
+                            "counts": {
+                                "snippets": fetched_snippets.len(),
+                                "scripts": 0,
+                                "pipelines": 0,
+                                "folders": 0
+                            },
+                            "checksums": checksums
+                        });
+
+                        zip.start_file("manifest.json", options).map_err(|e| e.to_string())?;
+                        zip.write_all(serde_json::to_string_pretty(&manifest).unwrap().as_bytes()).map_err(|e| e.to_string())?;
+                        zip.finish().map_err(|e| e.to_string())?;
+                        Ok(())
+                    };
+                    write_bundle().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
                 }
                 _ => {
                     let json_data = serde_json::to_string_pretty(&fetched_snippets).unwrap_or_default();

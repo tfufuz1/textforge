@@ -179,6 +179,26 @@ pub struct ParsedTemplateDto {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AggregatedTemplateVariableDto {
+    pub name: String,
+    pub has_default: bool,
+    pub default_val: Option<String>,
+    pub filter: Option<String>,
+    pub is_special: bool,
+    pub is_required: bool,
+    pub occurrences: u32,
+    pub snippet_count: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AggregatedTemplatePreviewDto {
+    pub variables: Vec<AggregatedTemplateVariableDto>,
+    pub total_snippets: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TemplateRenderResultDto {
     pub output: String,
     pub resolved_variables: HashMap<String, String>,
@@ -1143,6 +1163,93 @@ pub async fn parse_template(
         optional_vars,
         has_conditionals,
         has_loops,
+    })
+}
+
+#[tauri::command]
+pub async fn preview_template_variables_for_selection(
+    snippet_ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<AggregatedTemplatePreviewDto, String> {
+    if snippet_ids.is_empty() {
+        return Ok(AggregatedTemplatePreviewDto {
+            variables: Vec::new(),
+            total_snippets: 0,
+        });
+    }
+
+    #[derive(sqlx::FromRow)]
+    struct Row { content: String }
+
+    let mut fetched_contents = Vec::new();
+    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
+    for id in &snippet_ids {
+        if let Ok(Some(row)) = sqlx::query_as::<_, Row>("SELECT content FROM snippets WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+        {
+            fetched_contents.push(row.content);
+        }
+    }
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    struct VarAggregator {
+        default_val: Option<String>,
+        filter: Option<String>,
+        is_special: bool,
+        is_required: bool,
+        total_occurrences: u32,
+        snippet_count: u32,
+    }
+
+    let mut map: IndexMap<String, VarAggregator> = IndexMap::new();
+    let total_snippets = fetched_contents.len() as u32;
+
+    for content in fetched_contents {
+        if let Ok(parsed) = parse_template(content).await {
+            for v in parsed.variables {
+                let entry = map.entry(v.name.clone()).or_insert_with(|| VarAggregator {
+                    default_val: v.default_val.clone(),
+                    filter: v.filter.clone(),
+                    is_special: v.is_special,
+                    is_required: false,
+                    total_occurrences: 0,
+                    snippet_count: 0,
+                });
+
+                if entry.default_val.is_none() && v.default_val.is_some() {
+                    entry.default_val = v.default_val;
+                }
+                if entry.filter.is_none() && v.filter.is_some() {
+                    entry.filter = v.filter;
+                }
+                if v.is_required {
+                    entry.is_required = true;
+                }
+                entry.total_occurrences += v.occurrences;
+                entry.snippet_count += 1;
+            }
+        }
+    }
+
+    let variables = map
+        .into_iter()
+        .map(|(name, agg)| AggregatedTemplateVariableDto {
+            name,
+            has_default: agg.default_val.is_some(),
+            default_val: agg.default_val,
+            filter: agg.filter,
+            is_special: agg.is_special,
+            is_required: agg.is_required,
+            occurrences: agg.total_occurrences,
+            snippet_count: agg.snippet_count,
+        })
+        .collect();
+
+    Ok(AggregatedTemplatePreviewDto {
+        variables,
+        total_snippets,
     })
 }
 
