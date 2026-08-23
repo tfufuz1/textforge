@@ -53,6 +53,14 @@ pub enum BulkOperationDto {
     },
 }
 
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkProgressPayload {
+    pub completed: usize,
+    pub total: usize,
+    pub current_id: String,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BulkOperationFailedDto {
@@ -96,11 +104,11 @@ pub async fn execute_bulk_operation(
             let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
 
             for (idx, id) in snippet_ids.iter().enumerate() {
-                app.emit("bulk:progress", serde_json::json!({
-                    "processed": idx + 1,
-                    "total": total,
-                    "snippetId": id
-                })).ok();
+                app.emit("bulk:progress", BulkProgressPayload {
+                    completed: idx + 1,
+                    total,
+                    current_id: id.clone(),
+                }).ok();
 
                 #[derive(sqlx::FromRow)]
                 struct SnipRow { id: String, title: String, content: String, content_type: String }
@@ -152,9 +160,15 @@ pub async fn execute_bulk_operation(
             }
         }
         BulkOperationDto::BulkPin { snippet_ids, pinned } => {
+            let total = snippet_ids.len();
             let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
             let now = chrono::Utc::now().timestamp_millis();
-            for id in snippet_ids {
+            for (idx, id) in snippet_ids.iter().enumerate() {
+                app.emit("bulk:progress", BulkProgressPayload {
+                    completed: idx + 1,
+                    total,
+                    current_id: id.clone(),
+                }).ok();
                 match sqlx::query("UPDATE snippets SET is_pinned = ?, updated_at = ? WHERE id = ?")
                     .bind(if *pinned { 1 } else { 0 }).bind(now).bind(id).execute(&mut *tx).await {
                     Ok(_) => succeeded.push(id.clone()),
@@ -164,10 +178,16 @@ pub async fn execute_bulk_operation(
             tx.commit().await.map_err(|e| e.to_string())?;
         }
         BulkOperationDto::BulkFavorite { snippet_ids, favorite } => {
+            let total = snippet_ids.len();
             let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
             let now = chrono::Utc::now().timestamp_millis();
             let fav_val = if *favorite { 1 } else { 0 };
-            for id in snippet_ids {
+            for (idx, id) in snippet_ids.iter().enumerate() {
+                app.emit("bulk:progress", BulkProgressPayload {
+                    completed: idx + 1,
+                    total,
+                    current_id: id.clone(),
+                }).ok();
                 match sqlx::query("UPDATE snippets SET is_favorite = ?, updated_at = ? WHERE id = ?")
                     .bind(fav_val).bind(now).bind(id).execute(&mut *tx).await {
                     Ok(_) => succeeded.push(id.clone()),
@@ -177,12 +197,18 @@ pub async fn execute_bulk_operation(
             tx.commit().await.map_err(|e| e.to_string())?;
         }
         BulkOperationDto::BulkMove { snippet_ids, target_location } => {
+            let total = snippet_ids.len();
             let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
             let now = chrono::Utc::now().timestamp_millis();
             let loc_type = target_location.get("_type").and_then(|v| v.as_str()).unwrap_or("inbox");
             let folder_id = target_location.get("folderId").and_then(|v| v.as_str());
 
-            for id in snippet_ids {
+            for (idx, id) in snippet_ids.iter().enumerate() {
+                app.emit("bulk:progress", BulkProgressPayload {
+                    completed: idx + 1,
+                    total,
+                    current_id: id.clone(),
+                }).ok();
                 match sqlx::query("UPDATE snippets SET location_type = ?, location_folder_id = ?, deleted_at = NULL, updated_at = ? WHERE id = ?")
                     .bind(loc_type).bind(folder_id).bind(now).bind(id).execute(&mut *tx).await {
                     Ok(_) => succeeded.push(id.clone()),
@@ -192,9 +218,15 @@ pub async fn execute_bulk_operation(
             tx.commit().await.map_err(|e| e.to_string())?;
         }
         BulkOperationDto::BulkTag { snippet_ids, add_tags, remove_tags } => {
+            let total = snippet_ids.len();
             let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
             
-            for id in snippet_ids {
+            for (idx, id) in snippet_ids.iter().enumerate() {
+                app.emit("bulk:progress", BulkProgressPayload {
+                    completed: idx + 1,
+                    total,
+                    current_id: id.clone(),
+                }).ok();
                 let mut has_error = false;
                 for tag in remove_tags {
                     if let Err(e) = sqlx::query("DELETE FROM snippet_tags WHERE snippet_id = ? AND tag = ?")
@@ -228,50 +260,67 @@ pub async fn execute_bulk_operation(
             tx.commit().await.map_err(|e| e.to_string())?;
         }
         BulkOperationDto::BulkTransform { snippet_ids, pipeline_id, save_results } => {
+            let total = snippet_ids.len();
             let mut preview_list = Vec::new();
             let mut undo_actions = Vec::new();
 
-            for id in snippet_ids {
-                #[derive(sqlx::FromRow)]
-                struct SnipRow { content: String }
+            // TRANSACTION TRADE-OFF DOCUMENTATION:
+            // When save_results is true, all DB snippet updates are wrapped in a single SQLite transaction (state.db.begin()).
+            // Individual snippet pipeline/script errors or missing snippet errors do NOT fail or rollback the entire transaction,
+            // allowing valid transformations in the batch to be preserved.
+            // However, genuine DB storage errors (STORAGE_ERROR) encountered during query execution trigger a rollback of the
+            // transaction so that no partial DB state is committed if storage layer integrity is compromised.
+            if *save_results {
+                let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
+                let mut storage_error = None;
 
-                let snip = match sqlx::query_as::<_, SnipRow>("SELECT content FROM snippets WHERE id = ?")
-                    .bind(id)
-                    .fetch_optional(&state.db)
+                for (idx, id) in snippet_ids.iter().enumerate() {
+                    app.emit("bulk:progress", BulkProgressPayload {
+                        completed: idx + 1,
+                        total,
+                        current_id: id.clone(),
+                    }).ok();
+
+                    #[derive(sqlx::FromRow)]
+                    struct SnipRow { content: String }
+
+                    let snip = match sqlx::query_as::<_, SnipRow>("SELECT content FROM snippets WHERE id = ?")
+                        .bind(id)
+                        .fetch_optional(&mut *tx)
+                        .await
+                    {
+                        Ok(Some(s)) => s,
+                        Ok(None) => {
+                            failed.push(BulkOperationFailedDto {
+                                id: id.clone(),
+                                error: serde_json::json!({ "code": "SNIPPET_NOT_FOUND" }),
+                            });
+                            continue;
+                        }
+                        Err(e) => {
+                            storage_error = Some(e.to_string());
+                            failed.push(BulkOperationFailedDto {
+                                id: id.clone(),
+                                error: serde_json::json!({ "code": "STORAGE_ERROR", "details": e.to_string() }),
+                            });
+                            break;
+                        }
+                    };
+
+                    match crate::commands::transform::run_pipeline(
+                        pipeline_id.clone(),
+                        snip.content.clone(),
+                        state.clone(),
+                    )
                     .await
-                {
-                    Ok(Some(s)) => s,
-                    Ok(None) => {
-                        failed.push(BulkOperationFailedDto {
-                            id: id.clone(),
-                            error: serde_json::json!({ "code": "SNIPPET_NOT_FOUND" }),
-                        });
-                        continue;
-                    }
-                    Err(e) => {
-                        failed.push(BulkOperationFailedDto {
-                            id: id.clone(),
-                            error: serde_json::json!({ "code": "STORAGE_ERROR", "details": e.to_string() }),
-                        });
-                        continue;
-                    }
-                };
-
-                match crate::commands::transform::run_pipeline(
-                    pipeline_id.clone(),
-                    snip.content.clone(),
-                    state.clone(),
-                )
-                .await
-                {
-                    Ok(res) => {
-                        if *save_results {
+                    {
+                        Ok(res) => {
                             let now = chrono::Utc::now().timestamp_millis();
                             let update_res = sqlx::query("UPDATE snippets SET content = ?, updated_at = ? WHERE id = ?")
                                 .bind(&res.final_output)
                                 .bind(now)
                                 .bind(id)
-                                .execute(&state.db)
+                                .execute(&mut *tx)
                                 .await;
 
                             match update_res {
@@ -286,58 +335,123 @@ pub async fn execute_bulk_operation(
                                     });
                                 }
                                 Err(e) => {
+                                    storage_error = Some(e.to_string());
                                     failed.push(BulkOperationFailedDto {
                                         id: id.clone(),
                                         error: serde_json::json!({ "code": "STORAGE_ERROR", "details": e.to_string() }),
                                     });
+                                    break;
                                 }
                             }
-                        } else {
+                        }
+                        Err(err_msg) => {
+                            failed.push(BulkOperationFailedDto {
+                                id: id.clone(),
+                                error: serde_json::json!({ "code": "PIPELINE_ERROR", "details": err_msg }),
+                            });
+                        }
+                    }
+                }
+
+                if storage_error.is_some() {
+                    tx.rollback().await.map_err(|e| e.to_string())?;
+                } else {
+                    tx.commit().await.map_err(|e| e.to_string())?;
+
+                    if !undo_actions.is_empty() {
+                        let now = chrono::Utc::now().timestamp_millis();
+                        let undo_entry = crate::commands::undo::UndoEntryDto {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            performed_at: now,
+                            description: format!("Bulk Transformation auf {} Snippets angewendet", undo_actions.len()),
+                            action: crate::commands::undo::UndoActionDto::BulkOperation {
+                                operations: undo_actions,
+                            },
+                        };
+                        if let Ok(mut stack) = state.undo_stack.lock() {
+                            stack.push(undo_entry);
+                        }
+                    }
+                }
+            } else {
+                for (idx, id) in snippet_ids.iter().enumerate() {
+                    app.emit("bulk:progress", BulkProgressPayload {
+                        completed: idx + 1,
+                        total,
+                        current_id: id.clone(),
+                    }).ok();
+
+                    #[derive(sqlx::FromRow)]
+                    struct SnipRow { content: String }
+
+                    let snip = match sqlx::query_as::<_, SnipRow>("SELECT content FROM snippets WHERE id = ?")
+                        .bind(id)
+                        .fetch_optional(&state.db)
+                        .await
+                    {
+                        Ok(Some(s)) => s,
+                        Ok(None) => {
+                            failed.push(BulkOperationFailedDto {
+                                id: id.clone(),
+                                error: serde_json::json!({ "code": "SNIPPET_NOT_FOUND" }),
+                            });
+                            continue;
+                        }
+                        Err(e) => {
+                            failed.push(BulkOperationFailedDto {
+                                id: id.clone(),
+                                error: serde_json::json!({ "code": "STORAGE_ERROR", "details": e.to_string() }),
+                            });
+                            continue;
+                        }
+                    };
+
+                    match crate::commands::transform::run_pipeline(
+                        pipeline_id.clone(),
+                        snip.content.clone(),
+                        state.clone(),
+                    )
+                    .await
+                    {
+                        Ok(res) => {
                             succeeded.push(id.clone());
                             preview_list.push(BulkOperationPreviewDto {
                                 id: id.clone(),
                                 preview: res.final_output,
                             });
                         }
-                    }
-                    Err(err_msg) => {
-                        failed.push(BulkOperationFailedDto {
-                            id: id.clone(),
-                            error: serde_json::json!({ "code": "PIPELINE_ERROR", "details": err_msg }),
-                        });
+                        Err(err_msg) => {
+                            failed.push(BulkOperationFailedDto {
+                                id: id.clone(),
+                                error: serde_json::json!({ "code": "PIPELINE_ERROR", "details": err_msg }),
+                            });
+                        }
                     }
                 }
-            }
 
-            if *save_results && !undo_actions.is_empty() {
-                let now = chrono::Utc::now().timestamp_millis();
-                let undo_entry = crate::commands::undo::UndoEntryDto {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    performed_at: now,
-                    description: format!("Bulk Transformation auf {} Snippets angewendet", undo_actions.len()),
-                    action: crate::commands::undo::UndoActionDto::BulkOperation {
-                        operations: undo_actions,
-                    },
-                };
-                if let Ok(mut stack) = state.undo_stack.lock() {
-                    stack.push(undo_entry);
+                if !preview_list.is_empty() {
+                    previews = Some(preview_list);
                 }
-            }
-
-            if !preview_list.is_empty() {
-                previews = Some(preview_list);
             }
         }
         BulkOperationDto::BulkExport { snippet_ids, format, output_path } => {
+            let total = snippet_ids.len();
             #[derive(Serialize, sqlx::FromRow)]
             struct SnipRow { id: String, title: String, content: String, content_type: String }
 
             let mut fetched_snippets = Vec::new();
+            let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
 
-            for id in snippet_ids {
+            for (idx, id) in snippet_ids.iter().enumerate() {
+                app.emit("bulk:progress", BulkProgressPayload {
+                    completed: idx + 1,
+                    total,
+                    current_id: id.clone(),
+                }).ok();
+
                 match sqlx::query_as::<_, SnipRow>("SELECT id, title, content, content_type FROM snippets WHERE id = ?")
                     .bind(id)
-                    .fetch_optional(&state.db)
+                    .fetch_optional(&mut *tx)
                     .await
                 {
                     Ok(Some(s)) => {
@@ -358,6 +472,7 @@ pub async fn execute_bulk_operation(
                     }
                 }
             }
+            tx.commit().await.map_err(|e| e.to_string())?;
 
             let export_res = match format.to_lowercase().as_str() {
                 "json" | "json_array" => {

@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { onMount } from 'svelte';
+    import { listen, type UnlistenFn } from '@tauri-apps/api/event';
     import {
         snippetsStore,
         activeSnippetStore,
@@ -17,6 +19,37 @@
         handleRestoreSnippet,
         handleDeleteSnippetPermanently
     } from '../../stores/snippets';
+
+    interface BulkProgressPayload {
+        completed: number;
+        total: number;
+        currentId: string;
+    }
+
+    let isBulkProcessing = $state(false);
+    let bulkProgress = $state<BulkProgressPayload>({ completed: 0, total: 0, currentId: '' });
+
+    onMount(() => {
+        let unlisten: UnlistenFn | undefined;
+        listen<BulkProgressPayload>('bulk:progress', (event) => {
+            bulkProgress = event.payload;
+            isBulkProcessing = true;
+            if (event.payload.completed >= event.payload.total) {
+                // Auto reset when done
+                setTimeout(() => {
+                    isBulkProcessing = false;
+                }, 800);
+            }
+        }).then((fn) => {
+            unlisten = fn;
+        }).catch((err) => {
+            console.error('Failed to listen to bulk:progress event:', err);
+        });
+
+        return () => {
+            if (unlisten) unlisten();
+        };
+    });
 
     function formatTime(ms: number) {
         if (!ms) return '';
@@ -43,26 +76,42 @@
     async function applyBulkPin(pinned: boolean) {
         const snippetIds = Array.from($selectedSnippetIdsStore);
         if (snippetIds.length === 0) return;
-        await handleBulkOperation({ _type: 'bulk_pin', snippetIds, pinned });
+        try {
+            await handleBulkOperation({ _type: 'bulk_pin', snippetIds, pinned });
+        } finally {
+            isBulkProcessing = false;
+        }
     }
 
     async function applyBulkFavorite(favorite: boolean) {
         const snippetIds = Array.from($selectedSnippetIdsStore);
         if (snippetIds.length === 0) return;
-        await handleBulkOperation({ _type: 'bulk_favorite', snippetIds, favorite });
+        try {
+            await handleBulkOperation({ _type: 'bulk_favorite', snippetIds, favorite });
+        } finally {
+            isBulkProcessing = false;
+        }
     }
 
     async function applyBulkDuplicate() {
         const snippetIds = Array.from($selectedSnippetIdsStore);
         if (snippetIds.length === 0) return;
-        await handleDuplicateSnippetsBulk(snippetIds);
+        try {
+            await handleDuplicateSnippetsBulk(snippetIds);
+        } finally {
+            isBulkProcessing = false;
+        }
     }
 
     async function applyBulkDelete() {
         const snippetIds = Array.from($selectedSnippetIdsStore);
         if (snippetIds.length === 0) return;
         const permanent = $snippetFilterStore.isTrashed === true;
-        await handleBulkOperation({ _type: 'bulk_delete', snippetIds, permanent });
+        try {
+            await handleBulkOperation({ _type: 'bulk_delete', snippetIds, permanent });
+        } finally {
+            isBulkProcessing = false;
+        }
     }
 
     async function applyBulkTag() {
@@ -70,12 +119,16 @@
         if (snippetIds.length === 0) return;
         const tag = prompt("Tag name eingeben:");
         if (!tag || !tag.trim()) return;
-        await handleBulkOperation({
-            _type: 'bulk_tag',
-            snippetIds,
-            addTags: [tag.trim()],
-            removeTags: []
-        });
+        try {
+            await handleBulkOperation({
+                _type: 'bulk_tag',
+                snippetIds,
+                addTags: [tag.trim()],
+                removeTags: []
+            });
+        } finally {
+            isBulkProcessing = false;
+        }
     }
 
     async function applyBulkTransform() {
@@ -83,12 +136,16 @@
         if (snippetIds.length === 0) return;
         const pipelineId = prompt("Pipeline-ID eingeben:");
         if (!pipelineId || !pipelineId.trim()) return;
-        await handleBulkOperation({
-            _type: 'bulk_transform',
-            snippetIds,
-            pipelineId: pipelineId.trim(),
-            saveResults: true
-        });
+        try {
+            await handleBulkOperation({
+                _type: 'bulk_transform',
+                snippetIds,
+                pipelineId: pipelineId.trim(),
+                saveResults: true
+            });
+        } finally {
+            isBulkProcessing = false;
+        }
     }
 
     async function applyBulkExport() {
@@ -96,16 +153,36 @@
         if (snippetIds.length === 0) return;
         const outputPath = prompt("Zielpfad für Export eingeben:", "bulk_export.json");
         if (!outputPath || !outputPath.trim()) return;
-        await handleBulkOperation({
-            _type: 'bulk_export',
-            snippetIds,
-            format: 'json',
-            outputPath: outputPath.trim()
-        });
+        try {
+            await handleBulkOperation({
+                _type: 'bulk_export',
+                snippetIds,
+                format: 'json',
+                outputPath: outputPath.trim()
+            });
+        } finally {
+            isBulkProcessing = false;
+        }
     }
 </script>
 
 <div class="flex flex-col h-full space-y-2.5 overflow-hidden">
+    <!-- Progress Bar Banner -->
+    {#if isBulkProcessing && bulkProgress.total > 0}
+        <div class="bg-indigo-950/90 border border-indigo-700/70 p-2.5 rounded-xl shadow-md text-xs space-y-1.5 animate-pulse">
+            <div class="flex items-center justify-between font-mono text-[11px] text-indigo-200">
+                <span class="font-semibold">Bulk-Operation läuft...</span>
+                <span class="font-bold text-indigo-300">{bulkProgress.completed} von {bulkProgress.total} verarbeitet</span>
+            </div>
+            <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-indigo-900/50">
+                <div
+                    class="bg-gradient-to-r from-indigo-500 to-indigo-400 h-full transition-all duration-200"
+                    style="width: {Math.min(100, (bulkProgress.completed / Math.max(1, bulkProgress.total)) * 100)}%"
+                ></div>
+            </div>
+        </div>
+    {/if}
+
     <!-- Header with Select-All & Bulk Toolbar -->
     {#if $snippetsStore.length > 0}
         <div class="flex items-center justify-between px-3 py-2 bg-slate-900/90 rounded-2xl border border-slate-800 text-xs shadow-sm">
