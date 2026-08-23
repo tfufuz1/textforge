@@ -1,10 +1,10 @@
 use textforge::db::init_db;
 use tempfile::NamedTempFile;
 use textforge::AppState;
-use textforge::commands::undo::SharedUndoStack;
+use textforge::commands::undo::UndoStack;
 use textforge::commands::bulk::{BulkOperationDto, BulkProgressPayload, execute_bulk_operation};
 use std::sync::Mutex;
-use tauri::test::mock_app;
+use tauri::Manager;
 
 #[tokio::test]
 async fn test_bulk_progress_payload_serialization() {
@@ -24,12 +24,15 @@ async fn test_bulk_progress_payload_serialization() {
 async fn test_bulk_transform_pipeline_error_partial_success() {
     let tmp = NamedTempFile::new().unwrap();
     let db = init_db(tmp.path()).await.unwrap();
-    let app_handle = mock_app().app_handle().clone();
 
-    let state = AppState {
+    let app = tauri::test::mock_app();
+    app.manage(AppState {
         db: db.clone(),
-        undo_stack: SharedUndoStack::new(Mutex::new(Vec::new())),
-    };
+        undo_stack: Mutex::new(UndoStack::new()),
+    });
+
+    let state = app.state::<AppState>();
+    let app_handle = app.app_handle().clone();
 
     let now = chrono::Utc::now().timestamp_millis();
     // Insert 3 snippets
@@ -56,7 +59,7 @@ async fn test_bulk_transform_pipeline_error_partial_success() {
         save_results: true,
     };
 
-    let res = execute_bulk_operation(app_handle, op, tauri::State::from(&state)).await;
+    let res = execute_bulk_operation(app_handle, op, state).await;
     assert!(res.is_ok());
 
     let res_dto = res.unwrap();
@@ -76,12 +79,15 @@ async fn test_bulk_transform_pipeline_error_partial_success() {
 async fn test_bulk_export_progress_and_transaction() {
     let tmp = NamedTempFile::new().unwrap();
     let db = init_db(tmp.path()).await.unwrap();
-    let app_handle = mock_app().app_handle().clone();
 
-    let state = AppState {
+    let app = tauri::test::mock_app();
+    app.manage(AppState {
         db: db.clone(),
-        undo_stack: SharedUndoStack::new(Mutex::new(Vec::new())),
-    };
+        undo_stack: Mutex::new(UndoStack::new()),
+    });
+
+    let state = app.state::<AppState>();
+    let app_handle = app.app_handle().clone();
 
     let now = chrono::Utc::now().timestamp_millis();
     sqlx::query(
@@ -102,7 +108,7 @@ async fn test_bulk_export_progress_and_transaction() {
         output_path: export_path.clone(),
     };
 
-    let res = execute_bulk_operation(app_handle, op, tauri::State::from(&state)).await;
+    let res = execute_bulk_operation(app_handle, op, state).await;
     assert!(res.is_ok());
 
     let res_dto = res.unwrap();
