@@ -188,15 +188,13 @@ pub struct SnippetLocationDto {
     pub folder_id: Option<String>,
 }
 
-#[tauri::command]
-pub async fn promote_clipboard_to_snippet(
-    entry_id: String,
+pub(crate) async fn promote_clipboard_entry_internal(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    entry_id: &str,
     title: Option<String>,
-    location: SnippetLocationDto,
-    state: State<'_, AppState>,
-) -> Result<String, String> {
-    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
-
+    location: &SnippetLocationDto,
+    now: i64,
+) -> Result<crate::commands::snippets::SnippetDto, String> {
     #[derive(sqlx::FromRow)]
     struct ClipRow {
         content: String,
@@ -205,21 +203,19 @@ pub async fn promote_clipboard_to_snippet(
     }
 
     let clip = sqlx::query_as::<_, ClipRow>("SELECT content, content_type, source_app FROM clipboard_history WHERE id = ?")
-        .bind(&entry_id)
-        .fetch_optional(&mut *tx)
+        .bind(entry_id)
+        .fetch_optional(&mut **tx)
         .await
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Clipboard entry not found".to_string())?;
+        .ok_or_else(|| format!("Clipboard entry '{}' not found", entry_id))?;
 
     let snippet_id = uuid::Uuid::new_v4().to_string();
-    let now = chrono::Utc::now().timestamp_millis();
     let final_title = title.unwrap_or_else(|| {
         let trimmed = clip.content.trim();
         if trimmed.is_empty() {
             "Clipboard-Import".to_string()
         } else {
-            let limit = trimmed.chars().take(60).collect::<String>();
-            limit
+            trimmed.chars().take(60).collect::<String>()
         }
     });
 
@@ -239,30 +235,211 @@ pub async fn promote_clipboard_to_snippet(
     .bind(now)
     .bind(now)
     .bind(is_template)
-    .execute(&mut *tx)
+    .execute(&mut **tx)
     .await
     .map_err(|e| e.to_string())?;
 
     sqlx::query("UPDATE clipboard_history SET promoted_to_snippet_id = ? WHERE id = ?")
         .bind(&snippet_id)
-        .bind(&entry_id)
-        .execute(&mut *tx)
+        .bind(entry_id)
+        .execute(&mut **tx)
         .await
         .map_err(|e| e.to_string())?;
+
+    Ok(crate::commands::snippets::SnippetDto {
+        id: snippet_id,
+        title: final_title,
+        content: clip.content,
+        content_type: clip.content_type,
+        source_app: clip.source_app,
+        location_type: location._type.clone(),
+        folder_id: location.folder_id.clone(),
+        created_at: now,
+        updated_at: now,
+        last_used_at: None,
+        usage_count: 0,
+        is_pinned: false,
+        is_template: is_template != 0,
+        is_favorite: false,
+        color: None,
+        tags: vec![],
+    })
+}
+
+#[tauri::command]
+pub async fn promote_clipboard_to_snippet(
+    entry_id: String,
+    title: Option<String>,
+    location: SnippetLocationDto,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().timestamp_millis();
+
+    let snippet = promote_clipboard_entry_internal(&mut tx, &entry_id, title, &location, now).await?;
 
     tx.commit().await.map_err(|e| e.to_string())?;
 
     let undo_entry = crate::commands::undo::UndoEntryDto {
         id: uuid::Uuid::new_v4().to_string(),
         performed_at: now,
-        description: format!("Snippet '{}' aus Zwischenablage erstellt", final_title),
+        description: format!("Snippet '{}' aus Zwischenablage erstellt", snippet.title),
         action: crate::commands::undo::UndoActionDto::SnippetCreate {
-            created: serde_json::json!({
-                "id": snippet_id,
-                "title": final_title,
-                "content": clip.content,
-                "contentType": clip.content_type,
-            }),
+            created: serde_json::to_value(&snippet).unwrap_or_default(),
+        },
+    };
+
+    if let Ok(mut stack) = state.undo_stack.lock() {
+        stack.push(undo_entry);
+    }
+
+    Ok(snippet.id)
+}
+
+#[tauri::command]
+pub async fn compose_clipboard_entries_to_snippet(
+    entry_ids: Vec<String>,
+    separator: Option<String>,
+    title: Option<String>,
+    location: SnippetLocationDto,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    if entry_ids.is_empty() {
+        return Err("No entry IDs provided for composition".to_string());
+    }
+
+    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
+
+    #[derive(sqlx::FromRow)]
+    struct ClipRow {
+        id: String,
+        content: String,
+        content_type: String,
+        source_app: Option<String>,
+    }
+
+    let mut query = sqlx::QueryBuilder::new("SELECT id, content, content_type, source_app FROM clipboard_history WHERE id IN (");
+    let mut separated = query.separated(", ");
+    for id in &entry_ids {
+        separated.push_bind(id);
+    }
+    separated.push_unseparated(")");
+
+    let fetched_rows: Vec<ClipRow> = query
+        .build_query_as()
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let map: std::collections::HashMap<String, ClipRow> = fetched_rows
+        .into_iter()
+        .map(|r| (r.id.clone(), r))
+        .collect();
+
+    let mut ordered_contents = Vec::new();
+    let mut content_types = Vec::new();
+    let mut first_source_app = None;
+
+    for id in &entry_ids {
+        if let Some(row) = map.get(id) {
+            ordered_contents.push(row.content.clone());
+            content_types.push(row.content_type.clone());
+            if first_source_app.is_none() {
+                first_source_app = row.source_app.clone();
+            }
+        }
+    }
+
+    if ordered_contents.is_empty() {
+        return Err("None of the requested clipboard entries were found".to_string());
+    }
+
+    let sep = separator.as_deref().unwrap_or("\n\n");
+    let composed_content = ordered_contents.join(sep);
+
+    let final_title = match title.filter(|t| !t.trim().is_empty()) {
+        Some(t) => t,
+        None => {
+            let first_non_empty = ordered_contents.iter()
+                .find(|c| !c.trim().is_empty())
+                .map(|c| c.trim());
+            match first_non_empty {
+                Some(content) => content.chars().take(60).collect::<String>(),
+                None => "Clipboard-Import".to_string(),
+            }
+        }
+    };
+
+    let content_type = if !content_types.is_empty() && content_types.iter().all(|ct| ct == &content_types[0]) {
+        content_types[0].clone()
+    } else {
+        "plain_text".to_string()
+    };
+
+    let snippet_id = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp_millis();
+    let is_template = if composed_content.contains("{{") && composed_content.contains("}}") { 1 } else { 0 };
+
+    sqlx::query(
+        "INSERT INTO snippets (id, title, content, content_type, source_app, location_type, location_folder_id, created_at, updated_at, is_template)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&snippet_id)
+    .bind(&final_title)
+    .bind(&composed_content)
+    .bind(&content_type)
+    .bind(&first_source_app)
+    .bind(&location._type)
+    .bind(&location.folder_id)
+    .bind(now)
+    .bind(now)
+    .bind(is_template)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let mut update_query = sqlx::QueryBuilder::new("UPDATE clipboard_history SET promoted_to_snippet_id = ");
+    update_query.push_bind(&snippet_id);
+    update_query.push(" WHERE id IN (");
+    let mut update_sep = update_query.separated(", ");
+    for id in &entry_ids {
+        update_sep.push_bind(id);
+    }
+    update_sep.push_unseparated(")");
+
+    update_query
+        .build()
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    let created_dto = crate::commands::snippets::SnippetDto {
+        id: snippet_id.clone(),
+        title: final_title.clone(),
+        content: composed_content,
+        content_type,
+        source_app: first_source_app,
+        location_type: location._type,
+        folder_id: location.folder_id,
+        created_at: now,
+        updated_at: now,
+        last_used_at: None,
+        usage_count: 0,
+        is_pinned: false,
+        is_template: is_template != 0,
+        is_favorite: false,
+        color: None,
+        tags: vec![],
+    };
+
+    let undo_entry = crate::commands::undo::UndoEntryDto {
+        id: uuid::Uuid::new_v4().to_string(),
+        performed_at: now,
+        description: format!("Snippet '{}' aus Zwischenablage zusammengestellt", final_title),
+        action: crate::commands::undo::UndoActionDto::SnippetCreate {
+            created: serde_json::to_value(&created_dto).unwrap_or_default(),
         },
     };
 
@@ -271,6 +448,50 @@ pub async fn promote_clipboard_to_snippet(
     }
 
     Ok(snippet_id)
+}
+
+#[tauri::command]
+pub async fn promote_clipboard_entries_bulk(
+    entry_ids: Vec<String>,
+    location: SnippetLocationDto,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, String> {
+    if entry_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().timestamp_millis();
+
+    let mut created_snippet_ids = Vec::new();
+    let mut undo_actions = Vec::new();
+
+    for id in &entry_ids {
+        let snippet = promote_clipboard_entry_internal(&mut tx, id, None, &location, now).await?;
+        undo_actions.push(crate::commands::undo::UndoActionDto::SnippetCreate {
+            created: serde_json::to_value(&snippet).unwrap_or_default(),
+        });
+        created_snippet_ids.push(snippet.id);
+    }
+
+    tx.commit().await.map_err(|e| e.to_string())?;
+
+    if !undo_actions.is_empty() {
+        let undo_entry = crate::commands::undo::UndoEntryDto {
+            id: uuid::Uuid::new_v4().to_string(),
+            performed_at: now,
+            description: format!("{} Snippets aus Zwischenablage erstellt", created_snippet_ids.len()),
+            action: crate::commands::undo::UndoActionDto::BulkOperation {
+                operations: undo_actions,
+            },
+        };
+
+        if let Ok(mut stack) = state.undo_stack.lock() {
+            stack.push(undo_entry);
+        }
+    }
+
+    Ok(created_snippet_ids)
 }
 #[tauri::command]
 pub async fn pin_clipboard_entry(

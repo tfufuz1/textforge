@@ -59,6 +59,8 @@ async fn main() {
             commands::clipboard::get_clipboard_entry,
             commands::clipboard::pin_clipboard_entry,
             commands::clipboard::promote_clipboard_to_snippet,
+            commands::clipboard::compose_clipboard_entries_to_snippet,
+            commands::clipboard::promote_clipboard_entries_bulk,
             commands::clipboard::delete_clipboard_entry,
             commands::clipboard::clear_clipboard_history,
             commands::clipboard::read_clipboard_now,

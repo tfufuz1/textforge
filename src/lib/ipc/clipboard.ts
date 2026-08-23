@@ -52,6 +52,22 @@ export async function promoteToSnippet(entryId: string, title: string | null, lo
     return invoke('promote_clipboard_to_snippet', { entryId, title, location });
 }
 
+export async function composeClipboardEntriesToSnippet(
+    entryIds: string[],
+    separator?: string | null,
+    title?: string | null,
+    location: { _type: string, folderId: string | null } = { _type: 'inbox', folderId: null }
+): Promise<string> {
+    return invoke('compose_clipboard_entries_to_snippet', { entryIds, separator: separator ?? null, title: title ?? null, location });
+}
+
+export async function promoteClipboardEntriesBulk(
+    entryIds: string[],
+    location: { _type: string, folderId: string | null } = { _type: 'inbox', folderId: null }
+): Promise<string[]> {
+    return invoke('promote_clipboard_entries_bulk', { entryIds, location });
+}
+
 export async function getClipboardEntry(id: string): Promise<ClipboardEntryListItemDto & { content: string }> {
     return invoke('get_clipboard_entry', { id });
 }

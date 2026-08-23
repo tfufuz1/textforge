@@ -8,10 +8,12 @@
         clipboardHasNextStore,
         clipboardHasPrevStore
     } from '../../stores/clipboard';
-    import { clearHistory, deleteEntry, pinEntry, promoteToSnippet, getClipboardEntry, writeToClipboard } from '../../ipc/clipboard';
+    import { clearHistory, deleteEntry, pinEntry, promoteToSnippet, promoteClipboardEntriesBulk, getClipboardEntry, writeToClipboard } from '../../ipc/clipboard';
     import { loadSnippets } from '../../stores/snippets';
+    import { refreshUndoState } from '../../stores/undo';
     import ClipboardEntry from './ClipboardEntry.svelte';
     import ClipboardFilter from './ClipboardFilter.svelte';
+    import ComposeModal from './ComposeModal.svelte';
 
     // SVG Icons
     import TrashIcon from '$lib/components/icons/TrashIcon.svelte';
@@ -23,6 +25,7 @@
     import { pushNotification, Notifications } from '../../stores/notifications';
 
     let selectedIds = $state<Set<string>>(new Set());
+    let showComposeModal = $state(false);
 
     onMount(async () => {
         await loadClipboardHistory(0);
@@ -76,19 +79,18 @@
 
     async function handleBulkPromote() {
         if (selectedIds.size === 0) return;
-        let count = 0;
-        for (const id of selectedIds) {
-            try {
-                await promoteToSnippet(id, null, { _type: 'inbox', folderId: null });
-                count++;
-            } catch (e) {
-                console.error("Failed to promote entry:", id, e);
-            }
+        const ids = Array.from(selectedIds);
+        try {
+            const created = await promoteClipboardEntriesBulk(ids, { _type: 'inbox', folderId: null });
+            selectedIds = new Set();
+            await loadClipboardHistory();
+            await loadSnippets();
+            await refreshUndoState();
+            pushNotification(Notifications.snippetSaved(`${created.length} Snippets importiert`));
+            pushNotification(Notifications.undoAvailable(`${created.length} Snippets aus Zwischenablage erstellt`));
+        } catch (e) {
+            console.error("Failed to promote entries bulk:", e);
         }
-        selectedIds = new Set();
-        await loadClipboardHistory();
-        await loadSnippets();
-        pushNotification(Notifications.snippetSaved(`${count} Snippets importiert`));
     }
 
     async function handleBulkCopyCombined() {
@@ -153,19 +155,28 @@
             {#if selectedIds.size > 0}
                 <div class="flex items-center gap-1.5">
                     <button
+                        onclick={() => showComposeModal = true}
+                        class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold flex items-center space-x-1 transition-all shadow-md shadow-indigo-950/40"
+                        title="Ausgewählte zu einem einzigen Snippet zusammenfügen"
+                    >
+                        <PlusIcon class="w-3.5 h-3.5" />
+                        <span>Zu einem Snippet zusammenfügen</span>
+                    </button>
+                    <button
+                        onclick={handleBulkPromote}
+                        class="px-2.5 py-1 bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/50 rounded-lg font-semibold flex items-center space-x-1 transition-all"
+                        title="Ausgewählte als einzelne Snippets übernehmen"
+                    >
+                        <PlusIcon class="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Einzeln übernehmen ({selectedIds.size})</span>
+                    </button>
+                    <button
                         onclick={handleBulkCopyCombined}
                         class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg font-semibold flex items-center space-x-1 transition-all"
                         title="Ausgewählte kombiniert kopieren"
                     >
                         <CopyIcon class="w-3.5 h-3.5" />
                         <span>Kombiniert kopieren</span>
-                    </button>
-                    <button
-                        onclick={handleBulkPromote}
-                        class="px-2.5 py-1 bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/50 rounded-lg font-semibold flex items-center space-x-1 transition-all"
-                    >
-                        <PlusIcon class="w-3.5 h-3.5 text-indigo-400" />
-                        <span>Zu Snippets ({selectedIds.size})</span>
                     </button>
                     <button
                         onclick={() => handleBulkPin(true)}
@@ -232,3 +243,14 @@
         </div>
     </div>
 </div>
+
+{#if showComposeModal && selectedIds.size > 0}
+    <ComposeModal
+        entryIds={Array.from(selectedIds)}
+        onClose={() => showComposeModal = false}
+        onComposed={() => {
+            selectedIds = new Set();
+            showComposeModal = false;
+        }}
+    />
+{/if}
