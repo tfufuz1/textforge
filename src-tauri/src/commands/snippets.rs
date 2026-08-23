@@ -65,7 +65,14 @@ pub struct SnippetListItemDto {
     pub tags: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateSnippetsResultDto {
+    pub succeeded: Vec<SnippetDto>,
+    pub failed: Vec<crate::commands::bulk::BulkOperationFailedDto>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SnippetDto {
     pub id: String,
@@ -677,33 +684,122 @@ pub async fn duplicate_snippet(
 #[tauri::command]
 pub async fn duplicate_snippets_bulk(
     ids: Vec<String>,
+    target_folder_id: Option<String>,
     state: State<'_, AppState>,
-) -> Result<Vec<SnippetDto>, String> {
+) -> Result<DuplicateSnippetsResultDto, String> {
+    if ids.is_empty() {
+        return Ok(DuplicateSnippetsResultDto {
+            succeeded: Vec::new(),
+            failed: Vec::new(),
+        });
+    }
+
     let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
+
+    // 1. Fetch all requested original snippets in ONE query
+    #[derive(sqlx::FromRow)]
+    struct OriginalRow {
+        id: String,
+        title: String,
+        content: String,
+        content_type: String,
+        location_folder_id: Option<String>,
+    }
+
+    let mut orig_query = sqlx::QueryBuilder::new(
+        "SELECT id, title, content, content_type, location_folder_id FROM snippets WHERE id IN ("
+    );
+    let mut separated = orig_query.separated(", ");
+    for id in &ids {
+        separated.push_bind(id);
+    }
+    separated.push_unseparated(")");
+
+    let fetched_rows: Vec<OriginalRow> = orig_query
+        .build_query_as()
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let originals_map: HashMap<String, OriginalRow> = fetched_rows
+        .into_iter()
+        .map(|r| (r.id.clone(), r))
+        .collect();
+
+    // 2. Fetch all associated tags for affected snippet_ids in ONE query
+    let mut tag_query = sqlx::QueryBuilder::new(
+        "SELECT snippet_id, tag FROM snippet_tags WHERE snippet_id IN ("
+    );
+    let mut separated = tag_query.separated(", ");
+    for id in &ids {
+        separated.push_bind(id);
+    }
+    separated.push_unseparated(")");
+
+    let tag_rows: Vec<(String, String)> = tag_query
+        .build_query_as()
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut tags_map: HashMap<String, Vec<String>> = HashMap::new();
+    for (snippet_id, tag) in tag_rows {
+        tags_map.entry(snippet_id).or_default().push(tag);
+    }
+
     let mut created_snippets = Vec::new();
+    let mut failed = Vec::new();
     let mut undo_actions = Vec::new();
+    let mut created_titles = std::collections::HashSet::new();
     let now = chrono::Utc::now().timestamp_millis();
 
-    for id in ids {
-        let original = get_snippet(id, state.clone()).await?;
-        let new_title = next_copy_title(&original.title);
-        let created = insert_snippet_row_tx(
+    for id in &ids {
+        let original = match originals_map.get(id) {
+            Some(o) => o,
+            None => {
+                failed.push(crate::commands::bulk::BulkOperationFailedDto {
+                    id: id.clone(),
+                    error: serde_json::json!({ "code": "SNIPPET_NOT_FOUND", "message": "Snippet not found" }),
+                });
+                continue;
+            }
+        };
+
+        let mut new_title = next_copy_title(&original.title);
+        while created_titles.contains(&new_title) {
+            new_title = next_copy_title(&new_title);
+        }
+        created_titles.insert(new_title.clone());
+
+        let folder_id = target_folder_id.clone().or_else(|| original.location_folder_id.clone());
+        let tags = tags_map.get(id).cloned();
+
+        let create_result = insert_snippet_row_tx(
             &mut tx,
             CreateSnippetDto {
                 title: new_title,
-                content: original.content,
-                content_type: Some(original.content_type),
-                tags: Some(original.tags),
-                folder_id: original.folder_id,
+                content: original.content.clone(),
+                content_type: Some(original.content_type.clone()),
+                tags,
+                folder_id,
             },
         )
-        .await?;
+        .await;
 
-        undo_actions.push(crate::commands::undo::UndoActionDto::SnippetCreate {
-            created: serde_json::to_value(&created).unwrap_or_default(),
-        });
-
-        created_snippets.push(created);
+        match create_result {
+            Ok(created) => {
+                undo_actions.push(crate::commands::undo::UndoActionDto::SnippetCreate {
+                    created: serde_json::to_value(&created).unwrap_or_default(),
+                });
+                created_snippets.push(created);
+            }
+            Err(e) => {
+                failed.push(crate::commands::bulk::BulkOperationFailedDto {
+                    id: id.clone(),
+                    error: serde_json::json!({ "code": "STORAGE_ERROR", "details": e }),
+                });
+            }
+        }
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;
@@ -723,7 +819,10 @@ pub async fn duplicate_snippets_bulk(
         }
     }
 
-    Ok(created_snippets)
+    Ok(DuplicateSnippetsResultDto {
+        succeeded: created_snippets,
+        failed,
+    })
 }
 
 #[tauri::command]
