@@ -52,11 +52,23 @@ async fn test_bulk_transform_pipeline_error_partial_success() {
         .unwrap();
     }
 
-    // Execute bulk transform with invalid pipeline_id
-    // This will result in PIPELINE_ERROR for all snippets, but shouldn't fail storage / crash
+    // Insert dummy script and pipeline with step
+    sqlx::query("INSERT INTO scripts (id, name, description, script_type, category, js_code, regex_pattern, regex_replacement, regex_flags, color, parameters_json, tags_json, created_at, updated_at) VALUES ('script-1', 'Script 1', '', 'js', 'custom', 'invalid_js_code_syntax {{{{', NULL, NULL, 'g', '#000', '[]', '[]', 0, 0)")
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO pipelines (id, name, description, created_at, updated_at) VALUES ('bad_pipeline', 'Bad Pipe', '', 0, 0)")
+        .execute(&db)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO pipeline_steps (id, pipeline_id, script_id, step_order, label, enabled, failure_policy) VALUES ('step-1', 'bad_pipeline', 'script-1', 0, 'Step 1', 1, 'abort')")
+        .execute(&db)
+        .await
+        .unwrap();
+
     let op = BulkOperationDto::BulkTransform {
         snippet_ids: vec!["id-1".to_string(), "id-2".to_string(), "id-3".to_string()],
-        pipeline_id: "non_existent_pipeline".to_string(),
+        pipeline_id: "bad_pipeline".to_string(),
         save_results: true,
     };
 

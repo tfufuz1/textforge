@@ -9,10 +9,30 @@ use crate::sandbox::{run_script_in_sandbox, ScriptExecutionResultDto};
 use crate::commands::builtins;
 
 /// Timeout for regex execution (2000 ms limit).
+/// Serves as a safety net against unexpected behavior/hangs during heavy replacements.
 const REGEX_TIMEOUT: Duration = Duration::from_millis(2000);
 
-/// Maximum input size for regex execution (2 MB as per spec).
+/// Maximum standard input size for regex execution (2 MB as per spec).
 const MAX_REGEX_INPUT_BYTES: usize = 2 * 1024 * 1024;
+
+/// Conservative maximum input size for high-risk regex patterns (10 KB limit).
+const HIGH_RISK_REGEX_INPUT_BYTES: usize = 10 * 1024;
+
+/// Checks if a regex pattern exhibits high structural complexity or potential backtracking risk patterns,
+/// such as nested quantifiers `(x+)+`, `(x*)*`, chained wildcards `.*.*`, or nested quantifier groups.
+pub fn is_high_risk_pattern(pattern: &str) -> bool {
+    // Check for nested quantifiers inside groups followed by quantifiers e.g. (a+)+, (x*)*, (\w+)*
+    if let Ok(re) = regex::Regex::new(r"\([^)]*[\+\*\}][^)]*\)[\+\*\{]") {
+        if re.is_match(pattern) {
+            return true;
+        }
+    }
+    // Check for chained wildcards / greedy repeaters
+    if pattern.contains(".*.*") || pattern.contains(".+.+") || pattern.contains(".*.+") || pattern.contains(".+.*") {
+        return true;
+    }
+    false
+}
 
 #[derive(sqlx::FromRow, Clone, Debug)]
 pub struct PipelineStepRow {
@@ -135,6 +155,23 @@ fn substitute_params(text: &str, params_json: Option<&str>) -> String {
     result
 }
 
+/// Executes a regex transformation on the given input with defensive limits and monitoring.
+///
+/// ### RegEx Engine Analysis & Safety Guarantees:
+/// The Rust `regex` crate (version 1.x) utilizes an NFA/PikeVM/Lazy-DFA architecture with
+/// guaranteed $O(M \times N)$ worst-case time complexity, where $M$ is pattern length and $N$ is input length.
+/// - Unlike backtracking regex engines (e.g., PCRE, JS RegExp, Python `re`), the Rust `regex` crate
+///   **guarantees linear runtime** and **strictly forbids catastrophic backtracking / ReDoS**.
+/// - Syntax features that break linear runtime (e.g., backreferences, lookarounds) are rejected at compile-time.
+/// - Therefore, true catastrophic ReDoS vulnerability is structurally impossible with this crate.
+///
+/// ### Defensive Layers:
+/// 1. **Heuristic Tiered Length Limits:** Patterns with complex/nested quantifiers (e.g., `(x+)+`, `.*.*`)
+///    are classified as high risk via `is_high_risk_pattern`. They are restricted to `HIGH_RISK_REGEX_INPUT_BYTES` (10 KB)
+///    rather than `MAX_REGEX_INPUT_BYTES` (2 MB), drastically reducing worst-case string allocation and search workload.
+/// 2. **Timeout as a Safety Net:** The `tokio::time::timeout` serves as a safety net against unexpected hangs
+///    or abnormal execution (e.g. extremely heavy replacements).
+/// 3. **Monitoring & Logging:** Timeout occurrences and high-risk size limit violations are explicitly logged to `eprintln!`.
 pub async fn run_regex_transformation(
     input: &str,
     pattern: &str,
@@ -144,9 +181,33 @@ pub async fn run_regex_transformation(
     regex_cache: Option<&Mutex<LruCache<(String, String), regex::Regex>>>,
     start: std::time::Instant,
 ) -> ScriptExecutionResultDto {
-    // Input size check before compiling or running regex
-    if input.len() > MAX_REGEX_INPUT_BYTES {
+    let sub_pattern = substitute_params(pattern, params_json);
+    let sub_replacement = substitute_params(replacement, params_json);
+
+    // Heuristic pattern complexity assessment
+    let is_high_risk = is_high_risk_pattern(&sub_pattern);
+    let max_allowed_bytes = if is_high_risk {
+        HIGH_RISK_REGEX_INPUT_BYTES
+    } else {
+        MAX_REGEX_INPUT_BYTES
+    };
+
+    if input.len() > max_allowed_bytes {
         let elapsed = start.elapsed().as_millis() as u32;
+        if is_high_risk {
+            eprintln!(
+                "[RegEx Guard] High-risk pattern detected ('{}'). Input length ({} bytes) exceeds high-risk limit ({} bytes). Aborting execution.",
+                sub_pattern,
+                input.len(),
+                HIGH_RISK_REGEX_INPUT_BYTES
+            );
+        } else {
+            eprintln!(
+                "[RegEx Guard] Input size ({} bytes) exceeds maximum limit ({} bytes). Aborting execution.",
+                input.len(),
+                MAX_REGEX_INPUT_BYTES
+            );
+        }
         return ScriptExecutionResultDto {
             output: input.to_string(),
             execution_time_ms: elapsed,
@@ -154,13 +215,10 @@ pub async fn run_regex_transformation(
             error: Some(format!(
                 "Input size ({} bytes) exceeds maximum limit ({} bytes)",
                 input.len(),
-                MAX_REGEX_INPUT_BYTES
+                max_allowed_bytes
             )),
         };
     }
-
-    let sub_pattern = substitute_params(pattern, params_json);
-    let sub_replacement = substitute_params(replacement, params_json);
 
     // Form cache key AFTER parameter substitution
     let cache_key = (sub_pattern.clone(), flags.to_string());
@@ -242,12 +300,18 @@ pub async fn run_regex_transformation(
             console_logs: vec![],
             error: Some(format!("RegEx thread panicked: {}", join_err)),
         },
-        Err(_) => ScriptExecutionResultDto {
-            output: input.to_string(),
-            execution_time_ms: elapsed,
-            console_logs: vec![],
-            error: Some("RegEx-Ausführung hat das Zeitlimit überschritten — Pattern könnte pathologisches Backtracking verursachen".to_string()),
-        },
+        Err(_) => {
+            eprintln!(
+                "[RegEx Timeout Warning] RegEx execution timed out after {:?}. Pattern: '{}', Input length: {} bytes.",
+                REGEX_TIMEOUT, sub_pattern, input.len()
+            );
+            ScriptExecutionResultDto {
+                output: input.to_string(),
+                execution_time_ms: elapsed,
+                console_logs: vec![],
+                error: Some("RegEx-Ausführung hat das Zeitlimit überschritten — Pattern könnte pathologisches Backtracking oder extrem hohe Re-Allocation verursachen".to_string()),
+            }
+        }
     }
 }
 
@@ -1204,6 +1268,32 @@ mod tests {
         let err = validate_regex_pattern("[a-z", "g");
         assert!(err.is_err());
         assert!(err.unwrap_err().contains("Ungültiges RegEx-Muster"));
+    }
+
+    #[tokio::test]
+    async fn test_high_risk_pattern_heuristics() {
+        // Test high-risk pattern detection
+        assert!(is_high_risk_pattern("(a+)+"));
+        assert!(is_high_risk_pattern("(\\w*)*"));
+        assert!(is_high_risk_pattern("foo.*.*bar"));
+        assert!(is_high_risk_pattern("a.+.+b"));
+
+        // Test normal patterns are not high-risk
+        assert!(!is_high_risk_pattern("^[a-z0-9_-]+$"));
+        assert!(!is_high_risk_pattern("\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b"));
+
+        let start = std::time::Instant::now();
+        // Create an input larger than HIGH_RISK_REGEX_INPUT_BYTES (10 KB) but smaller than MAX_REGEX_INPUT_BYTES (2 MB)
+        let medium_input = "a".repeat(20 * 1024); // 20 KB
+
+        // High-risk pattern on 20 KB input -> should fail with limit error
+        let res_risk = run_regex_transformation(&medium_input, "(a+)+", "b", "g", None, None, start).await;
+        assert!(res_risk.error.is_some());
+        assert!(res_risk.error.unwrap().contains("exceeds maximum limit"));
+
+        // Low-risk pattern on 20 KB input -> should succeed
+        let res_safe = run_regex_transformation(&medium_input, "^a+", "b", "g", None, None, start).await;
+        assert!(res_safe.error.is_none());
     }
 }
 
