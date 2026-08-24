@@ -39,7 +39,7 @@
 	<div class="bg-slate-900 border border-slate-800 rounded-xl p-5 w-full max-w-sm shadow-2xl space-y-4">
 		<div class="flex items-center justify-between border-b border-slate-800 pb-3">
 			<h3 class="text-sm font-semibold text-slate-200">Tag bearbeiten: #{tagName}</h3>
-			<button type="button" onclick={onClose} class="text-slate-400 hover:text-white">✕</button>
+			<button type="button" onclick={onClose} aria-label="Schließen" class="text-slate-400 hover:text-white">✕</button>
 		</div>
 
 		<div class="space-y-3 text-xs">
