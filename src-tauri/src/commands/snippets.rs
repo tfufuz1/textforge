@@ -362,6 +362,8 @@ pub async fn list_snippets(
     let total_count = total_count as u32;
 
     // 2. DATA Query
+    // Hinweis: SQLite SUBSTR operiert auf TEXT-Spalten zeichenweise (Unicode-Codepoints), nicht byteweise.
+    // Daher ist hier keine zusätzliche UTF-8-Grenzsicherung im Rust-Code nötig.
     let mut query = sqlx::QueryBuilder::new(
         "SELECT s.id, s.title, SUBSTR(s.content, 1, 200) as preview, s.content_type, s.created_at, s.updated_at, s.is_pinned, s.is_favorite, s.color, GROUP_CONCAT(t.tag) as tags
          FROM snippets s
@@ -413,11 +415,10 @@ pub async fn list_snippets(
 
     let items: Vec<SnippetListItemDto> = entries.into_iter().map(|r| {
         let tags = r.tags.map(|t| t.split(',').map(|s| s.to_string()).collect()).unwrap_or_default();
-        let preview = String::from_utf8_lossy(r.preview.as_bytes()).to_string();
         SnippetListItemDto {
             id: r.id,
             title: r.title,
-            preview,
+            preview: r.preview,
             content_type: r.content_type,
             created_at: r.created_at,
             updated_at: r.updated_at,
