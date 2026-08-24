@@ -361,11 +361,11 @@ pub async fn execute_pipeline_with_steps(
             continue;
         }
 
-        if let Some(script_id) = step.script_id {
+        if let Some(ref script_id) = step.script_id {
             let step_start = std::time::Instant::now();
             let res = execute_script_core(
                 ExecuteScriptDto {
-                    script_id: Some(script_id),
+                    script_id: Some(script_id.clone()),
                     js_code: None,
                     regex_pattern: None,
                     regex_replacement: None,

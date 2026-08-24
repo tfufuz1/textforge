@@ -323,7 +323,7 @@ pub async fn execute_bulk_operation<R: tauri::Runtime>(
                     match crate::commands::transform::execute_pipeline_with_steps(
                         &steps,
                         snip.content.clone(),
-                        state,
+                        &state,
                     )
                     .await
                     {
@@ -434,7 +434,7 @@ pub async fn execute_bulk_operation<R: tauri::Runtime>(
                     match crate::commands::transform::execute_pipeline_with_steps(
                         &steps,
                         snip.content.clone(),
-                        state,
+                        &state,
                     )
                     .await
                     {
