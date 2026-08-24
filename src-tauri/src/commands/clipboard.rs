@@ -450,28 +450,87 @@ pub async fn compose_clipboard_entries_to_snippet(
     Ok(snippet_id)
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PromoteClipboardBulkResultDto {
+    pub succeeded: Vec<String>,
+    pub failed: Vec<crate::commands::bulk::BulkOperationFailedDto>,
+}
+
 #[tauri::command]
 pub async fn promote_clipboard_entries_bulk(
     entry_ids: Vec<String>,
     location: SnippetLocationDto,
     state: State<'_, AppState>,
-) -> Result<Vec<String>, String> {
+) -> Result<PromoteClipboardBulkResultDto, String> {
     if entry_ids.is_empty() {
-        return Ok(Vec::new());
+        return Ok(PromoteClipboardBulkResultDto {
+            succeeded: Vec::new(),
+            failed: Vec::new(),
+        });
     }
 
     let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
     let now = chrono::Utc::now().timestamp_millis();
 
+    #[derive(sqlx::FromRow)]
+    struct ClipCheckRow {
+        id: String,
+    }
+
+    let mut check_query = sqlx::QueryBuilder::new(
+        "SELECT id FROM clipboard_history WHERE id IN ("
+    );
+    let mut separated = check_query.separated(", ");
+    for id in &entry_ids {
+        separated.push_bind(id);
+    }
+    separated.push_unseparated(")");
+
+    let existing_rows: Vec<ClipCheckRow> = check_query
+        .build_query_as()
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let existing_ids: std::collections::HashSet<String> = existing_rows
+        .into_iter()
+        .map(|r| r.id)
+        .collect();
+
     let mut created_snippet_ids = Vec::new();
+    let mut failed = Vec::new();
     let mut undo_actions = Vec::new();
 
     for id in &entry_ids {
-        let snippet = promote_clipboard_entry_internal(&mut tx, id, None, &location, now).await?;
-        undo_actions.push(crate::commands::undo::UndoActionDto::SnippetCreate {
-            created: serde_json::to_value(&snippet).unwrap_or_default(),
-        });
-        created_snippet_ids.push(snippet.id);
+        if !existing_ids.contains(id) {
+            failed.push(crate::commands::bulk::BulkOperationFailedDto {
+                id: id.clone(),
+                error: serde_json::json!({
+                    "code": "CLIPBOARD_ENTRY_NOT_FOUND",
+                    "message": "Clipboard entry not found"
+                }),
+            });
+            continue;
+        }
+
+        match promote_clipboard_entry_internal(&mut tx, id, None, &location, now).await {
+            Ok(snippet) => {
+                undo_actions.push(crate::commands::undo::UndoActionDto::SnippetCreate {
+                    created: serde_json::to_value(&snippet).unwrap_or_default(),
+                });
+                created_snippet_ids.push(snippet.id);
+            }
+            Err(e) => {
+                failed.push(crate::commands::bulk::BulkOperationFailedDto {
+                    id: id.clone(),
+                    error: serde_json::json!({
+                        "code": "STORAGE_ERROR",
+                        "details": e
+                    }),
+                });
+            }
+        }
     }
 
     tx.commit().await.map_err(|e| e.to_string())?;
@@ -491,7 +550,10 @@ pub async fn promote_clipboard_entries_bulk(
         }
     }
 
-    Ok(created_snippet_ids)
+    Ok(PromoteClipboardBulkResultDto {
+        succeeded: created_snippet_ids,
+        failed,
+    })
 }
 #[tauri::command]
 pub async fn pin_clipboard_entry(

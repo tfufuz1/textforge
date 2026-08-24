@@ -83,13 +83,37 @@
         if (selectedIds.size === 0) return;
         const ids = Array.from(selectedIds);
         try {
-            const created = await promoteClipboardEntriesBulk(ids, { _type: 'inbox', folderId: null });
+            const res = await promoteClipboardEntriesBulk(ids, { _type: 'inbox', folderId: null });
             selectedIds = new Set();
             await loadClipboardHistory();
             await loadSnippets();
             await refreshUndoState();
-            pushNotification(Notifications.snippetSaved(`${created.length} Snippets importiert`));
-            pushNotification(Notifications.undoAvailable(`${created.length} Snippets aus Zwischenablage erstellt`));
+
+            if (res.succeeded.length > 0 && res.failed.length === 0) {
+                pushNotification(Notifications.snippetSaved(`${res.succeeded.length} Snippets importiert`));
+                pushNotification(Notifications.undoAvailable(`${res.succeeded.length} Snippets aus Zwischenablage erstellt`));
+            } else if (res.succeeded.length > 0 && res.failed.length > 0) {
+                pushNotification({
+                    id: crypto.randomUUID(),
+                    severity: 'warning',
+                    title: 'Teilweise übernommen',
+                    message: { _tag: 'Some', value: `${res.succeeded.length} von ${ids.length} Einträgen übernommen — ${res.failed.length} fehlgeschlagen.` },
+                    duration: 4000,
+                    action: { _tag: 'None' },
+                    createdAt: Date.now() as any
+                });
+                pushNotification(Notifications.undoAvailable(`${res.succeeded.length} Snippets aus Zwischenablage erstellt`));
+            } else {
+                pushNotification({
+                    id: crypto.randomUUID(),
+                    severity: 'error',
+                    title: 'Übernahme fehlgeschlagen',
+                    message: { _tag: 'Some', value: `Alle ${res.failed.length} Einträge konnten nicht übernommen werden.` },
+                    duration: 4000,
+                    action: { _tag: 'None' },
+                    createdAt: Date.now() as any
+                });
+            }
         } catch (e) {
             console.error("Failed to promote entries bulk:", e);
         }

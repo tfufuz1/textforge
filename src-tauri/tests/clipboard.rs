@@ -308,13 +308,14 @@ async fn test_promote_clipboard_entries_bulk() {
     let entry_ids = vec![id1.clone(), id2.clone(), id3.clone()];
     let location = SnippetLocationDto { _type: "inbox".to_string(), folder_id: None };
 
-    let created_ids = promote_clipboard_entries_bulk(entry_ids, location, state.clone()).await.unwrap();
+    let res = promote_clipboard_entries_bulk(entry_ids, location, state.clone()).await.unwrap();
 
-    assert_eq!(created_ids.len(), 3);
+    assert_eq!(res.succeeded.len(), 3);
+    assert_eq!(res.failed.len(), 0);
 
     // Verify 3 distinct snippets created in DB
     let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM snippets WHERE id IN (?, ?, ?)")
-        .bind(&created_ids[0]).bind(&created_ids[1]).bind(&created_ids[2])
+        .bind(&res.succeeded[0]).bind(&res.succeeded[1]).bind(&res.succeeded[2])
         .fetch_one(&db)
         .await
         .unwrap();
@@ -324,14 +325,83 @@ async fn test_promote_clipboard_entries_bulk() {
     // Verify promoted_to_snippet_id
     let (p1,): (Option<String>,) = sqlx::query_as("SELECT promoted_to_snippet_id FROM clipboard_history WHERE id = ?")
         .bind(&id1).fetch_one(&db).await.unwrap();
-    assert_eq!(p1, Some(created_ids[0].clone()));
+    assert_eq!(p1, Some(res.succeeded[0].clone()));
 
     let (p2,): (Option<String>,) = sqlx::query_as("SELECT promoted_to_snippet_id FROM clipboard_history WHERE id = ?")
         .bind(&id2).fetch_one(&db).await.unwrap();
-    assert_eq!(p2, Some(created_ids[1].clone()));
+    assert_eq!(p2, Some(res.succeeded[1].clone()));
 
     // Verify single bulk undo entry
     let stack = state.undo_stack.lock().unwrap();
     assert_eq!(stack.undo_history.len(), 1);
     assert!(stack.undo_history[0].description.contains("3 Snippets aus Zwischenablage erstellt"));
+}
+
+#[tokio::test]
+async fn test_promote_clipboard_entries_bulk_partial_failure() {
+    use std::sync::Mutex;
+    use tauri::Manager;
+    use textforge::commands::clipboard::{promote_clipboard_entries_bulk, SnippetLocationDto};
+    use textforge::AppState;
+
+    let tmp = NamedTempFile::new().unwrap();
+    let db = init_db(tmp.path()).await.unwrap();
+
+    let app = tauri::test::mock_app();
+    app.manage(AppState {
+        db: db.clone(),
+        undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
+        regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
+    });
+    let state = app.state::<AppState>();
+
+    let valid_id_1 = "partial-clip-1".to_string();
+    let valid_id_2 = "partial-clip-2".to_string();
+    let invalid_id = "non-existent-clip-id".to_string();
+
+    sqlx::query("INSERT INTO clipboard_history (id, content, content_hash, content_type, captured_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(&valid_id_1).bind("Valid Clip 1").bind("hash_p1").bind("plain_text").bind(100)
+        .execute(&db).await.unwrap();
+
+    sqlx::query("INSERT INTO clipboard_history (id, content, content_hash, content_type, captured_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(&valid_id_2).bind("Valid Clip 2").bind("hash_p2").bind("plain_text").bind(200)
+        .execute(&db).await.unwrap();
+
+    // 10 entry IDs, 9 valid (duplicated valid IDs if needed or 2 valid + 1 invalid + 7 valid)
+    // Create 9 valid clipboard entries
+    let mut entry_ids = Vec::new();
+    for i in 1..=9 {
+        let cid = format!("clip-item-{}", i);
+        sqlx::query("INSERT INTO clipboard_history (id, content, content_hash, content_type, captured_at) VALUES (?, ?, ?, ?, ?)")
+            .bind(&cid).bind(format!("Content {}", i)).bind(format!("hash_{}", i)).bind("plain_text").bind(100 + i * 10)
+            .execute(&db).await.unwrap();
+        if i == 5 {
+            entry_ids.push(invalid_id.clone());
+        }
+        entry_ids.push(cid);
+    }
+
+    assert_eq!(entry_ids.len(), 10);
+
+    let location = SnippetLocationDto { _type: "inbox".to_string(), folder_id: None };
+
+    let res = promote_clipboard_entries_bulk(entry_ids, location, state.clone()).await.unwrap();
+
+    // 9 succeeded, 1 failed
+    assert_eq!(res.succeeded.len(), 9);
+    assert_eq!(res.failed.len(), 1);
+    assert_eq!(res.failed[0].id, invalid_id);
+    assert_eq!(res.failed[0].error["code"], "CLIPBOARD_ENTRY_NOT_FOUND");
+
+    // Check database to confirm 9 snippets created and persisted
+    let (created_count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM snippets")
+        .fetch_one(&db)
+        .await
+        .unwrap();
+    assert_eq!(created_count, 9);
+
+    // Verify undo stack entry contains 9 created actions
+    let stack = state.undo_stack.lock().unwrap();
+    assert_eq!(stack.undo_history.len(), 1);
+    assert!(stack.undo_history[0].description.contains("9 Snippets aus Zwischenablage erstellt"));
 }
