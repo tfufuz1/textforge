@@ -48,7 +48,7 @@
 		{#each selectedTags as tag}
 			<span class="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded text-xs">
 				#{tag}
-				<button type="button" onclick={() => onRemoveTag(tag)} class="hover:text-red-400 ml-0.5">✕</button>
+				<button type="button" onclick={() => onRemoveTag(tag)} aria-label={`Tag #${tag} entfernen`} class="hover:text-red-400 ml-0.5">✕</button>
 			</span>
 		{/each}
 
