@@ -61,10 +61,15 @@ export async function composeClipboardEntriesToSnippet(
     return invoke('compose_clipboard_entries_to_snippet', { entryIds, separator: separator ?? null, title: title ?? null, location });
 }
 
+export interface PromoteClipboardBulkResultDto {
+  succeeded: string[];
+  failed: { id: string; error: any }[];
+}
+
 export async function promoteClipboardEntriesBulk(
     entryIds: string[],
     location: { _type: string, folderId: string | null } = { _type: 'inbox', folderId: null }
-): Promise<string[]> {
+): Promise<PromoteClipboardBulkResultDto> {
     return invoke('promote_clipboard_entries_bulk', { entryIds, location });
 }
 
