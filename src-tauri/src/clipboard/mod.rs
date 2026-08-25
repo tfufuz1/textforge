@@ -59,9 +59,52 @@ pub async fn start_monitor_with_config(
 /// Primary monitor: uses `wl-paste --watch` for event-driven clipboard monitoring.
 /// Uses `wl-paste --watch wl-paste --no-newline` to fetch the full snapshot on clipboard change.
 async fn try_wl_paste_monitor(app_handle: AppHandle, config: &ClipboardMonitorConfig) -> Result<(), MonitorError> {
+    // Erst prüfen ob wl-paste überhaupt verfügbar ist
+    let probe = tokio::process::Command::new("wl-paste")
+        .arg("--version")
+        .output()
+        .await
+        .map_err(|_| MonitorError::WlPasteNotFound)?;
+
+    if !probe.status.success() {
+        return Err(MonitorError::WlPasteNotFound);
+    }
+
     let min_length = config.min_content_length;
     let max_entries = config.max_entries;
 
+    tokio::spawn(async move {
+        let mut backoff_ms = 500u64;
+        const MAX_BACKOFF_MS: u64 = 30_000;
+
+        loop {
+            let run_result = run_wl_paste_watch_once(
+                app_handle.clone(), min_length, max_entries
+            ).await;
+
+            match run_result {
+                Ok(()) => {
+                    eprintln!("[clipboard] wl-paste watch ended cleanly, restarting...");
+                    backoff_ms = 500; // Reset bei sauberem Ende
+                }
+                Err(e) => {
+                    eprintln!("[clipboard] wl-paste watch error: {:?}, retry in {}ms", e, backoff_ms);
+                }
+            }
+
+            tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+            backoff_ms = (backoff_ms * 2).min(MAX_BACKOFF_MS);
+        }
+    });
+
+    Ok(())
+}
+
+async fn run_wl_paste_watch_once(
+    app_handle: AppHandle,
+    min_length: usize,
+    max_entries: u32,
+) -> Result<(), MonitorError> {
     let mut child = tokio::process::Command::new("wl-paste")
         .arg("--watch")
         .arg("sh")
@@ -71,33 +114,24 @@ async fn try_wl_paste_monitor(app_handle: AppHandle, config: &ClipboardMonitorCo
         .spawn()
         .map_err(|e| MonitorError::WaylandSubprocessFailed(e.to_string()))?;
 
-    let stdout = child
-        .stdout
-        .take()
+    let stdout = child.stdout.take()
         .ok_or(MonitorError::WaylandSubprocessFailed("No stdout".into()))?;
 
-    tokio::spawn(async move {
-        let mut reader = BufReader::new(stdout);
-        let mut buffer = Vec::new();
+    let mut reader = BufReader::new(stdout);
+    let mut buffer = Vec::new();
 
-        while let Ok(n) = reader.read_until(0, &mut buffer).await {
-            if n == 0 {
-                break;
+    while let Ok(n) = reader.read_until(0, &mut buffer).await {
+        if n == 0 { break; }
+        if buffer.ends_with(&[0]) { buffer.pop(); }
+        if let Ok(content) = String::from_utf8(buffer.clone()) {
+            if content.len() >= min_length {
+                insert_clipboard_entry_with_config(&app_handle, &content, min_length, max_entries).await;
             }
-            if buffer.ends_with(&[0]) {
-                buffer.pop();
-            }
-            if let Ok(content) = String::from_utf8(buffer.clone()) {
-                if content.len() >= min_length {
-                    insert_clipboard_entry_with_config(&app_handle, &content, min_length, max_entries).await;
-                }
-            }
-            buffer.clear();
         }
+        buffer.clear();
+    }
 
-        let _ = child.wait().await;
-    });
-
+    let _ = child.wait().await;
     Ok(())
 }
 

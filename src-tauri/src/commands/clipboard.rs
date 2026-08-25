@@ -689,14 +689,28 @@ pub async fn read_clipboard_now(
     }
 }
 
+pub struct ClipboardWriteGuard;
+
+impl ClipboardWriteGuard {
+    pub fn acquire() -> Self {
+        crate::automation::dispatcher::AutomationDispatcher::set_internal_write_guard(true);
+        Self
+    }
+}
+
+impl Drop for ClipboardWriteGuard {
+    fn drop(&mut self) {
+        crate::automation::dispatcher::AutomationDispatcher::set_internal_write_guard(false);
+    }
+}
+
 #[tauri::command]
 pub async fn write_to_clipboard(
     content: String,
     snippet_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    // INVARIANT-AR2: Set feedback-loop guard before writing
-    crate::automation::dispatcher::AutomationDispatcher::set_internal_write_guard(true);
+    let _guard = ClipboardWriteGuard::acquire();
 
     let copy_res = tokio::process::Command::new("wl-copy")
         .arg(&content)
@@ -718,8 +732,6 @@ pub async fn write_to_clipboard(
             .await
             .ok();
     }
-
-    crate::automation::dispatcher::AutomationDispatcher::set_internal_write_guard(false);
 
     Ok(())
 }
