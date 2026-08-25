@@ -38,10 +38,19 @@ async fn main() {
                 migrate_legacy_db(&db_path);
 
                 let db = db::init_db(&db_path).await.expect("Failed to initialize db");
+
+                // max_size aus Settings lesen
+                let max_undo = sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key = 'undo.max_stack_size'")
+                    .fetch_optional(&db)
+                    .await
+                    .ok()
+                    .flatten()
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(50);
                 
                 app_handle.manage(AppState {
                     db: db.clone(),
-                    undo_stack: Mutex::new(commands::undo::UndoStack::new()),
+                    undo_stack: Mutex::new(commands::undo::UndoStack::new_with_size(max_undo)),
                     regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
                 });
 
