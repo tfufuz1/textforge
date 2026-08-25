@@ -72,4 +72,78 @@ describe('Snippet Domain Core', () => {
             }
         }
     });
+
+    test('duplicate copies tags, color, contentType but resets isPinned and favorite', () => {
+        const createRes = Snippet.create({
+            title: 'Original',
+            content: 'SELECT 1',
+            location: { _type: 'inbox' },
+            sourceApp: 'db-client'
+        });
+        expect(createRes._tag).toBe('Ok');
+        if (createRes._tag === 'Ok') {
+            const originalWithMeta = {
+                ...createRes.value,
+                tags: ['sql', 'db'] as any,
+                color: Option.some('#FF0000'),
+                isPinned: true,
+                favorite: true
+            };
+
+            const dupRes = Snippet.duplicate(originalWithMeta);
+            expect(dupRes._tag).toBe('Ok');
+            if (dupRes._tag === 'Ok') {
+                const dup = dupRes.value;
+                expect(dup.title).toBe('Original (Kopie)');
+                expect(dup.tags).toEqual(['sql', 'db']);
+                expect(dup.color).toEqual(Option.some('#FF0000'));
+                expect(dup.contentType).toBe('sql');
+                expect(dup.sourceApp).toEqual(Option.some('db-client'));
+                expect(dup.isPinned).toBe(false);
+                expect(dup.favorite).toBe(false);
+            }
+        }
+    });
+
+    test('validate rejects tags with invalid characters', () => {
+        const createRes = Snippet.create({
+            title: 'Title',
+            content: 'Content',
+            location: { _type: 'inbox' }
+        });
+        expect(createRes._tag).toBe('Ok');
+        if (createRes._tag === 'Ok') {
+            const invalidTagSnippet = {
+                ...createRes.value,
+                tags: ['valid-tag', 'invalid tag with spaces'] as any
+            };
+            const valRes = Snippet.validate(invalidTagSnippet);
+            expect(valRes._tag).toBe('Err');
+            if (valRes._tag === 'Err') {
+                expect(valRes.error).toEqual({ code: 'INVALID_TAG', raw: 'invalid tag with spaces' });
+            }
+        }
+    });
+
+    test('isTemplate uses same regex as TemplateRenderer', () => {
+        const withVar = Snippet.create({
+            title: 'T',
+            content: 'Hello {{name}}!',
+            location: { _type: 'inbox' }
+        });
+        expect(withVar._tag).toBe('Ok');
+        if (withVar._tag === 'Ok') {
+            expect(withVar.value.isTemplate).toBe(true);
+        }
+
+        const withBlockOnly = Snippet.create({
+            title: 'T',
+            content: '{{#if foo}}bar{{/if}}',
+            location: { _type: 'inbox' }
+        });
+        expect(withBlockOnly._tag).toBe('Ok');
+        if (withBlockOnly._tag === 'Ok') {
+            expect(withBlockOnly.value.isTemplate).toBe(false);
+        }
+    });
 });
