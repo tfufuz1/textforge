@@ -42,10 +42,11 @@ pub async fn suggest_tags(
         tag: String,
         color: Option<String>,
         cnt: i64,
+        tag_created_at: Option<i64>,
     }
 
     let rows = sqlx::query_as::<_, Row>(
-        "SELECT t.tag, tc.color, COUNT(*) as cnt
+        "SELECT t.tag, tc.color, tc.created_at as tag_created_at, COUNT(*) as cnt
          FROM (
            SELECT tag FROM snippet_tags
            UNION ALL
@@ -71,7 +72,7 @@ pub async fn suggest_tags(
         color: r.color,
         usage_count: r.cnt as u32,
         last_used_at: now,
-        created_at: now,
+        created_at: r.tag_created_at.unwrap_or(now),
     }).collect())
 }
 
@@ -84,27 +85,49 @@ pub async fn rename_tag(
     let old_tag = old_name.trim().to_lowercase();
     let new_tag = new_name.trim().to_lowercase();
 
+    if old_tag == new_tag {
+        return Ok(TagRenameResultDto { old_name: old_tag, new_name: new_tag, affected_items: 0 });
+    }
+
     let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
 
-    let r1 = sqlx::query("UPDATE OR IGNORE snippet_tags SET tag = ? WHERE tag = ?")
-        .bind(&new_tag).bind(&old_tag).execute(&mut *tx).await.map_err(|e| e.to_string())?;
-    let r2 = sqlx::query("UPDATE OR IGNORE script_tags SET tag = ? WHERE tag = ?")
-        .bind(&new_tag).bind(&old_tag).execute(&mut *tx).await.map_err(|e| e.to_string())?;
-    let r3 = sqlx::query("UPDATE OR IGNORE pipeline_tags SET tag = ? WHERE tag = ?")
-        .bind(&new_tag).bind(&old_tag).execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    // Schritt 1: Duplikate auf 3 Tabellen bereinigen
+    // Für Items, die BEREITS den new_tag haben: old_tag entfernen (statt rename versuchen)
+    for table in ["snippet_tags", "script_tags", "pipeline_tags"] {
+        let id_col = match table {
+            "snippet_tags"  => "snippet_id",
+            "script_tags"   => "script_id",
+            _               => "pipeline_id",
+        };
+        sqlx::query(&format!(
+            "DELETE FROM {table} WHERE tag = ? AND {id_col} IN (
+               SELECT {id_col} FROM {table} WHERE tag = ?
+             )"
+        ))
+        .bind(&old_tag).bind(&new_tag)
+        .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    }
 
-    sqlx::query("DELETE FROM snippet_tags WHERE tag = ?").bind(&old_tag).execute(&mut *tx).await.ok();
-    sqlx::query("DELETE FROM script_tags WHERE tag = ?").bind(&old_tag).execute(&mut *tx).await.ok();
-    sqlx::query("DELETE FROM pipeline_tags WHERE tag = ?").bind(&old_tag).execute(&mut *tx).await.ok();
+    // Schritt 2: Umbenennen (jetzt ohne Konflikte möglich)
+    let mut total_affected = 0u32;
+    for table in ["snippet_tags", "script_tags", "pipeline_tags"] {
+        let res = sqlx::query(&format!("UPDATE {table} SET tag = ? WHERE tag = ?"))
+            .bind(&new_tag).bind(&old_tag)
+            .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+        total_affected += res.rows_affected() as u32;
+    }
+
+    // Schritt 3: Tag-Color migrieren
+    sqlx::query("UPDATE tag_colors SET tag_name = ? WHERE tag_name = ?")
+        .bind(&new_tag).bind(&old_tag)
+        .execute(&mut *tx).await.ok();
 
     tx.commit().await.map_err(|e| e.to_string())?;
-
-    let total = (r1.rows_affected() + r2.rows_affected() + r3.rows_affected()) as u32;
 
     Ok(TagRenameResultDto {
         old_name: old_tag,
         new_name: new_tag,
-        affected_items: total,
+        affected_items: total_affected,
     })
 }
 

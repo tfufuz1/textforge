@@ -121,11 +121,15 @@ function normalizeSnippetDto(dto: SnippetDto): SnippetDto {
   };
 }
 
+function normalizeSnippetListItemDto(item: SnippetListItemDto): SnippetListItemDto {
+  return item;
+}
+
 export async function listSnippets(filter?: SnippetFilterDto): Promise<SnippetListResultDto> {
   const res = await invoke<SnippetListResultDto>('list_snippets', { filter });
   return {
     ...res,
-    items: res.items.map(normalizeSnippetDto),
+    items: res.items.map(normalizeSnippetListItemDto),
   };
 }
 
