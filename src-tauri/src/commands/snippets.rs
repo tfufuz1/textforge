@@ -1042,6 +1042,49 @@ pub async fn delete_folder(
     Ok(())
 }
 
+/// Heuristische Silbenzählung für englische und deutsche Wörter.
+/// Verwendet Vokal-Folge-Zählung mit sprachspezifischen Korrekturen.
+pub fn count_syllables_heuristic(word: &str) -> u32 {
+    if word.is_empty() { return 0; }
+
+    let lower = word.to_lowercase();
+    let chars: Vec<char> = lower.chars().filter(|c| c.is_alphabetic()).collect();
+
+    if chars.is_empty() { return 1; }
+
+    let vowels = ['a', 'e', 'i', 'o', 'u', 'y',
+                   'ä', 'ö', 'ü', 'à', 'â', 'è', 'é', 'ê'];
+
+    let mut syllable_count: i32 = 0;
+    let mut prev_vowel = false;
+
+    for &c in &chars {
+        let is_vowel = vowels.contains(&c);
+        if is_vowel && !prev_vowel {
+            syllable_count += 1;
+        }
+        prev_vowel = is_vowel;
+    }
+
+    // Stummes 'e' am Wortende abziehen (englisch: "make", "take")
+    if chars.last() == Some(&'e') && syllable_count > 1 {
+        syllable_count -= 1;
+    }
+
+    // "le" am Ende zählt als Silbe auch wenn 'e' stumm war (z.B. "table", "simple")
+    if chars.len() >= 2 && chars[chars.len()-2] == 'l' && chars[chars.len()-1] == 'e' {
+        syllable_count += 1;
+    }
+
+    // Diphthonge und Digraphen kompensieren (ai, au, ou, oo, ee etc.)
+    let word_str: String = chars.iter().collect();
+    let diphthong_re = regex::Regex::new(r"(ai|au|ou|oo|ee|ue|eu|ei|ie)").unwrap();
+    let diphthong_count = diphthong_re.find_iter(&word_str).count() as i32;
+    syllable_count -= diphthong_count / 2; // Schätzung
+
+    (syllable_count.max(1)) as u32
+}
+
 #[tauri::command]
 pub async fn compute_text_stats(
     content: String,
@@ -1060,6 +1103,7 @@ pub async fn compute_text_stats(
     let mut freq_map: HashMap<String, u32> = HashMap::new();
     let mut longest_word = String::new();
     let mut total_word_len = 0usize;
+    let mut total_syllables: u32 = 0;
 
     for w in &words {
         let clean = w.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect::<String>();
@@ -1068,6 +1112,7 @@ pub async fn compute_text_stats(
             longest_word = clean.clone();
         }
         total_word_len += clean.len();
+        total_syllables += count_syllables_heuristic(&clean);
         *freq_map.entry(clean).or_insert(0) += 1;
     }
 
@@ -1085,7 +1130,10 @@ pub async fn compute_text_stats(
     let reading_time_ms = (word_count as f32 / 200.0 * 60.0 * 1000.0) as u32;
 
     let flesch_kincaid_grade = if word_count > 0 && sentence_count > 0 {
-        let grade = 0.39 * (word_count as f32 / sentence_count as f32) + 11.8 * 1.5 - 15.59;
+        let syllable_ratio = total_syllables as f32 / word_count as f32;
+        let grade = 0.39 * (word_count as f32 / sentence_count as f32)
+                    + 11.8 * syllable_ratio
+                    - 15.59;
         Some(grade.max(0.0))
     } else {
         None
