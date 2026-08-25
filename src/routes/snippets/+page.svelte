@@ -3,17 +3,16 @@
     import SnippetList from '../../lib/components/snippets/SnippetList.svelte';
     import SnippetEditor from '../../lib/components/snippets/SnippetEditor.svelte';
     import FilterPanel from '../../lib/components/filter/FilterPanel.svelte';
-    import { loadSnippets, snippetFilterStore, selectedTagStore, tagCloud, activeSnippetStore, handleEmptyTrash } from '../../lib/stores/snippets';
+    import { loadSnippets, loadAllTags, setSearchQuery, snippetFilterStore, selectedTagStore, tagCloud, activeSnippetStore, handleEmptyTrash } from '../../lib/stores/snippets';
 
     let searchQuery = $state('');
 
     onMount(async () => {
-        await loadSnippets();
+        await Promise.all([loadSnippets(), loadAllTags()]);
     });
 
     function handleSearch() {
-        snippetFilterStore.update(f => ({ ...f, searchQuery }));
-        loadSnippets();
+        setSearchQuery(searchQuery);
     }
 
     function selectTag(tag: string | null) {
