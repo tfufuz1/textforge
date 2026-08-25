@@ -520,7 +520,7 @@ pub(crate) async fn insert_snippet_row_tx(
     let content_type = draft.content_type.unwrap_or_else(|| "plain_text".to_string());
     let is_template = if draft.content.contains("{{") && draft.content.contains("}}") { 1 } else { 0 };
 
-    let location_type = if draft.folder_id.is_some() { "folder" } else { "root" };
+    let location_type = if draft.folder_id.is_some() { "folder" } else { "inbox" };
 
     sqlx::query(
         "INSERT INTO snippets (id, title, content, content_type, location_type, location_folder_id, created_at, updated_at, is_template)
@@ -853,12 +853,21 @@ pub async fn trash_snippet(
 ) -> Result<(), String> {
     let snippet_before = get_snippet(id.clone(), state.clone()).await.ok();
     let now = chrono::Utc::now().timestamp_millis();
-    sqlx::query("UPDATE snippets SET location_type = 'trash', updated_at = ? WHERE id = ?")
-        .bind(now)
-        .bind(&id)
-        .execute(&state.db)
-        .await
-        .map_err(|e| e.to_string())?;
+
+    // pre_trash_folder_id und pre_trash_location_type persistieren
+    sqlx::query(
+        "UPDATE snippets SET
+           pre_trash_location_type = location_type,
+           pre_trash_folder_id = location_folder_id,
+           location_type = 'trash',
+           updated_at = ?
+         WHERE id = ?"
+    )
+    .bind(now)
+    .bind(&id)
+    .execute(&state.db)
+    .await
+    .map_err(|e| e.to_string())?;
 
     if let Some(snip) = snippet_before {
         let undo_entry = crate::commands::undo::UndoEntryDto {
@@ -899,12 +908,20 @@ pub async fn restore_snippet(
 ) -> Result<(), String> {
     let snippet_before = get_snippet(id.clone(), state.clone()).await.ok();
     let now = chrono::Utc::now().timestamp_millis();
-    sqlx::query("UPDATE snippets SET location_type = 'root', location_folder_id = NULL, updated_at = ? WHERE id = ?")
-        .bind(now)
-        .bind(&id)
-        .execute(&state.db)
-        .await
-        .map_err(|e| e.to_string())?;
+    sqlx::query(
+        "UPDATE snippets SET
+           location_type = COALESCE(pre_trash_location_type, 'inbox'),
+           location_folder_id = pre_trash_folder_id,
+           pre_trash_location_type = NULL,
+           pre_trash_folder_id = NULL,
+           updated_at = ?
+         WHERE id = ?"
+    )
+    .bind(now)
+    .bind(&id)
+    .execute(&state.db)
+    .await
+    .map_err(|e| e.to_string())?;
 
     if let Some(snip) = snippet_before {
         let undo_entry = crate::commands::undo::UndoEntryDto {

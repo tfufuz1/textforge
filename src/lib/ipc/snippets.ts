@@ -110,28 +110,51 @@ export interface TextStatsDto {
   readingTimeMs: number;
 }
 
+function normalizeLocationType(raw: string): string {
+  return raw === 'root' ? 'inbox' : raw;
+}
+
+function normalizeSnippetDto(dto: SnippetDto): SnippetDto {
+  return {
+    ...dto,
+    locationType: normalizeLocationType(dto.locationType),
+  };
+}
+
 export async function listSnippets(filter?: SnippetFilterDto): Promise<SnippetListResultDto> {
-  return invoke('list_snippets', { filter });
+  const res = await invoke<SnippetListResultDto>('list_snippets', { filter });
+  return {
+    ...res,
+    items: res.items.map(normalizeSnippetDto),
+  };
 }
 
 export async function getSnippet(id: string): Promise<SnippetDto> {
-  return invoke('get_snippet', { id });
+  const dto = await invoke<SnippetDto>('get_snippet', { id });
+  return normalizeSnippetDto(dto);
 }
 
 export async function createSnippet(draft: CreateSnippetDto): Promise<SnippetDto> {
-  return invoke('create_snippet', { draft });
+  const dto = await invoke<SnippetDto>('create_snippet', { draft });
+  return normalizeSnippetDto(dto);
 }
 
 export async function updateSnippet(id: string, draft: UpdateSnippetDto): Promise<SnippetDto> {
-  return invoke('update_snippet', { id, draft });
+  const dto = await invoke<SnippetDto>('update_snippet', { id, draft });
+  return normalizeSnippetDto(dto);
 }
 
 export async function duplicateSnippet(id: string): Promise<SnippetDto> {
-  return invoke('duplicate_snippet', { id });
+  const dto = await invoke<SnippetDto>('duplicate_snippet', { id });
+  return normalizeSnippetDto(dto);
 }
 
 export async function duplicateSnippetsBulk(ids: string[], targetFolderId?: string | null): Promise<DuplicateSnippetsResultDto> {
-  return invoke('duplicate_snippets_bulk', { ids, targetFolderId });
+  const res = await invoke<DuplicateSnippetsResultDto>('duplicate_snippets_bulk', { ids, targetFolderId });
+  return {
+    ...res,
+    succeeded: res.succeeded.map(normalizeSnippetDto),
+  };
 }
 
 export async function trashSnippet(id: string): Promise<void> {
