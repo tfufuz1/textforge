@@ -21,7 +21,7 @@ async fn test_restore_to_original_folder() {
     let state = app.state::<AppState>();
 
     // 1. Create a folder
-    let folder = create_folder("Work".to_string(), None, None, state.clone()).await.unwrap();
+    let folder = create_folder("Work".to_string(), None, Some("folder".to_string()), state.clone()).await.unwrap();
 
     // 2. Create a snippet inside that folder
     let draft = CreateSnippetDto {
