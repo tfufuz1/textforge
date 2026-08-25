@@ -71,10 +71,14 @@ pub struct UndoStack {
 
 impl UndoStack {
     pub fn new() -> Self {
+        Self::new_with_size(50)
+    }
+
+    pub fn new_with_size(max_size: usize) -> Self {
         Self {
             undo_history: Vec::new(),
             redo_history: Vec::new(),
-            max_size: 50,
+            max_size,
         }
     }
 
@@ -100,6 +104,7 @@ pub async fn push_undo_entry(
 }
 
 // Helper for applying actions to the DB
+#[allow(dead_code)]
 async fn apply_action(action: &UndoActionDto, is_undo: bool, db: &sqlx::SqlitePool) -> Result<(), String> {
     let mut tx = db.begin().await.map_err(|e| e.to_string())?;
     execute_action_recursive(action, is_undo, &mut tx).await?;
@@ -110,13 +115,49 @@ async fn apply_action(action: &UndoActionDto, is_undo: bool, db: &sqlx::SqlitePo
 async fn execute_action_recursive(action: &UndoActionDto, is_undo: bool, tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<(), String> {
     match action {
         UndoActionDto::SnippetUpdate { before, after } => {
-            let state = if is_undo { before } else { after };
-            let id = state.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-            let content = state.get("content").and_then(|v| v.as_str()).unwrap_or_default();
-            let title = state.get("title").and_then(|v| v.as_str()).unwrap_or_default();
+            let state_val = if is_undo { before } else { after };
+            let id = state_val.get("id").and_then(|v| v.as_str()).unwrap_or_default();
             let now = chrono::Utc::now().timestamp_millis();
-            sqlx::query("UPDATE snippets SET title = ?, content = ?, updated_at = ? WHERE id = ?")
-                .bind(title).bind(content).bind(now).bind(id).execute(&mut **tx).await.map_err(|e| e.to_string())?;
+
+            // 1. Hauptfelder wiederherstellen
+            sqlx::query(
+                "UPDATE snippets SET
+                   title = COALESCE(?, title),
+                   content = COALESCE(?, content),
+                   content_type = COALESCE(?, content_type),
+                   is_pinned = COALESCE(?, is_pinned),
+                   is_favorite = COALESCE(?, is_favorite),
+                   color = ?,
+                   location_type = COALESCE(?, location_type),
+                   location_folder_id = ?,
+                   is_template = COALESCE(?, is_template),
+                   updated_at = ?
+                 WHERE id = ?"
+            )
+            .bind(state_val.get("title").and_then(|v| v.as_str()))
+            .bind(state_val.get("content").and_then(|v| v.as_str()))
+            .bind(state_val.get("contentType").and_then(|v| v.as_str()))
+            .bind(state_val.get("isPinned").and_then(|v| v.as_bool()).map(|b| if b { 1i64 } else { 0i64 }))
+            .bind(state_val.get("isFavorite").and_then(|v| v.as_bool()).map(|b| if b { 1i64 } else { 0i64 }))
+            .bind(state_val.get("color").and_then(|v| v.as_str()))
+            .bind(state_val.get("locationType").and_then(|v| v.as_str()))
+            .bind(state_val.get("folderId").and_then(|v| v.as_str()))
+            .bind(state_val.get("isTemplate").and_then(|v| v.as_bool()).map(|b| if b { 1i64 } else { 0i64 }))
+            .bind(now).bind(id)
+            .execute(&mut **tx).await.map_err(|e| e.to_string())?;
+
+            // 2. Tags wiederherstellen
+            if let Some(tags_val) = state_val.get("tags").and_then(|v| v.as_array()) {
+                sqlx::query("DELETE FROM snippet_tags WHERE snippet_id = ?")
+                    .bind(id).execute(&mut **tx).await.map_err(|e| e.to_string())?;
+                for tag in tags_val {
+                    if let Some(tag_str) = tag.as_str() {
+                        sqlx::query("INSERT OR IGNORE INTO snippet_tags (snippet_id, tag) VALUES (?, ?)")
+                            .bind(id).bind(tag_str)
+                            .execute(&mut **tx).await.map_err(|e| e.to_string())?;
+                    }
+                }
+            }
         }
         UndoActionDto::SnippetCreate { created } => {
             let id = created.get("id").and_then(|v| v.as_str()).unwrap_or_default();
@@ -124,23 +165,71 @@ async fn execute_action_recursive(action: &UndoActionDto, is_undo: bool, tx: &mu
                 sqlx::query("DELETE FROM snippets WHERE id = ?").bind(id).execute(&mut **tx).await.map_err(|e| e.to_string())?;
                 sqlx::query("UPDATE clipboard_history SET promoted_to_snippet_id = NULL WHERE promoted_to_snippet_id = ?").bind(id).execute(&mut **tx).await.ok();
             } else {
-                let title = created.get("title").and_then(|v| v.as_str()).unwrap_or_default();
-                let content = created.get("content").and_then(|v| v.as_str()).unwrap_or_default();
-                let content_type = created.get("contentType").and_then(|v| v.as_str()).unwrap_or("text");
                 let now = chrono::Utc::now().timestamp_millis();
-                sqlx::query("INSERT OR REPLACE INTO snippets (id, title, content, content_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-                    .bind(id).bind(title).bind(content).bind(content_type).bind(now).bind(now).execute(&mut **tx).await.map_err(|e| e.to_string())?;
+                let created_at = created.get("createdAt").and_then(|v| v.as_i64()).unwrap_or(now);
+                sqlx::query(
+                    "INSERT OR REPLACE INTO snippets
+                       (id, title, content, content_type, location_type, location_folder_id,
+                        is_pinned, is_favorite, is_template, color, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                )
+                .bind(id)
+                .bind(created.get("title").and_then(|v| v.as_str()).unwrap_or(""))
+                .bind(created.get("content").and_then(|v| v.as_str()).unwrap_or(""))
+                .bind(created.get("contentType").and_then(|v| v.as_str()).unwrap_or("plain_text"))
+                .bind(created.get("locationType").and_then(|v| v.as_str()).unwrap_or("inbox"))
+                .bind(created.get("folderId").and_then(|v| v.as_str()))
+                .bind(created.get("isPinned").and_then(|v| v.as_bool()).unwrap_or(false) as i64)
+                .bind(created.get("isFavorite").and_then(|v| v.as_bool()).unwrap_or(false) as i64)
+                .bind(created.get("isTemplate").and_then(|v| v.as_bool()).unwrap_or(false) as i64)
+                .bind(created.get("color").and_then(|v| v.as_str()))
+                .bind(created_at).bind(now)
+                .execute(&mut **tx).await.map_err(|e| e.to_string())?;
+
+                if let Some(tags_val) = created.get("tags").and_then(|v| v.as_array()) {
+                    for tag in tags_val {
+                        if let Some(tag_str) = tag.as_str() {
+                            sqlx::query("INSERT OR IGNORE INTO snippet_tags (snippet_id, tag) VALUES (?, ?)")
+                                .bind(id).bind(tag_str)
+                                .execute(&mut **tx).await.map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
             }
         }
         UndoActionDto::SnippetDelete { deleted } => {
             let id = deleted.get("id").and_then(|v| v.as_str()).unwrap_or_default();
             if is_undo {
-                let title = deleted.get("title").and_then(|v| v.as_str()).unwrap_or_default();
-                let content = deleted.get("content").and_then(|v| v.as_str()).unwrap_or_default();
-                let content_type = deleted.get("contentType").and_then(|v| v.as_str()).unwrap_or("text");
                 let now = chrono::Utc::now().timestamp_millis();
-                sqlx::query("INSERT OR REPLACE INTO snippets (id, title, content, content_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-                    .bind(id).bind(title).bind(content).bind(content_type).bind(now).bind(now).execute(&mut **tx).await.map_err(|e| e.to_string())?;
+                let created_at = deleted.get("createdAt").and_then(|v| v.as_i64()).unwrap_or(now);
+                sqlx::query(
+                    "INSERT OR REPLACE INTO snippets
+                       (id, title, content, content_type, location_type, location_folder_id,
+                        is_pinned, is_favorite, is_template, color, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                )
+                .bind(id)
+                .bind(deleted.get("title").and_then(|v| v.as_str()).unwrap_or(""))
+                .bind(deleted.get("content").and_then(|v| v.as_str()).unwrap_or(""))
+                .bind(deleted.get("contentType").and_then(|v| v.as_str()).unwrap_or("plain_text"))
+                .bind(deleted.get("locationType").and_then(|v| v.as_str()).unwrap_or("inbox"))
+                .bind(deleted.get("folderId").and_then(|v| v.as_str()))
+                .bind(deleted.get("isPinned").and_then(|v| v.as_bool()).unwrap_or(false) as i64)
+                .bind(deleted.get("isFavorite").and_then(|v| v.as_bool()).unwrap_or(false) as i64)
+                .bind(deleted.get("isTemplate").and_then(|v| v.as_bool()).unwrap_or(false) as i64)
+                .bind(deleted.get("color").and_then(|v| v.as_str()))
+                .bind(created_at).bind(now)
+                .execute(&mut **tx).await.map_err(|e| e.to_string())?;
+
+                if let Some(tags_val) = deleted.get("tags").and_then(|v| v.as_array()) {
+                    for tag in tags_val {
+                        if let Some(tag_str) = tag.as_str() {
+                            sqlx::query("INSERT OR IGNORE INTO snippet_tags (snippet_id, tag) VALUES (?, ?)")
+                                .bind(id).bind(tag_str)
+                                .execute(&mut **tx).await.map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
             } else {
                 sqlx::query("DELETE FROM snippets WHERE id = ?").bind(id).execute(&mut **tx).await.map_err(|e| e.to_string())?;
             }
