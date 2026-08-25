@@ -33,15 +33,7 @@ pub enum MonitorError {
 pub async fn start_monitor(
     app_handle: AppHandle,
 ) -> Result<(), MonitorError> {
-    let config = ClipboardMonitorConfig::default();
-    start_monitor_with_config(app_handle, config).await
-}
-
-pub async fn start_monitor_with_config(
-    app_handle: AppHandle,
-    config: ClipboardMonitorConfig,
-) -> Result<(), MonitorError> {
-    match try_wl_paste_monitor(app_handle.clone(), &config).await {
+    match try_wl_paste_monitor(app_handle.clone()).await {
         Ok(()) => {
             eprintln!("Clipboard monitor: using wl-paste --watch");
             Ok(())
@@ -51,14 +43,21 @@ pub async fn start_monitor_with_config(
                 "wl-paste monitor failed ({:?}), falling back to arboard polling (500ms)",
                 e
             );
-            start_arboard_polling(app_handle, config).await
+            start_arboard_polling(app_handle).await
         }
     }
 }
 
+pub async fn start_monitor_with_config(
+    app_handle: AppHandle,
+    _config: ClipboardMonitorConfig,
+) -> Result<(), MonitorError> {
+    start_monitor(app_handle).await
+}
+
 /// Primary monitor: uses `wl-paste --watch` for event-driven clipboard monitoring.
 /// Uses `wl-paste --watch wl-paste --no-newline` to fetch the full snapshot on clipboard change.
-async fn try_wl_paste_monitor(app_handle: AppHandle, config: &ClipboardMonitorConfig) -> Result<(), MonitorError> {
+async fn try_wl_paste_monitor(app_handle: AppHandle) -> Result<(), MonitorError> {
     // Erst prüfen ob wl-paste überhaupt verfügbar ist
     let probe = tokio::process::Command::new("wl-paste")
         .arg("--version")
@@ -70,16 +69,13 @@ async fn try_wl_paste_monitor(app_handle: AppHandle, config: &ClipboardMonitorCo
         return Err(MonitorError::WlPasteNotFound);
     }
 
-    let min_length = config.min_content_length;
-    let max_entries = config.max_entries;
-
     tokio::spawn(async move {
         let mut backoff_ms = 500u64;
         const MAX_BACKOFF_MS: u64 = 30_000;
 
         loop {
             let run_result = run_wl_paste_watch_once(
-                app_handle.clone(), min_length, max_entries
+                app_handle.clone()
             ).await;
 
             match run_result {
@@ -102,8 +98,6 @@ async fn try_wl_paste_monitor(app_handle: AppHandle, config: &ClipboardMonitorCo
 
 async fn run_wl_paste_watch_once(
     app_handle: AppHandle,
-    min_length: usize,
-    max_entries: u32,
 ) -> Result<(), MonitorError> {
     let mut child = tokio::process::Command::new("wl-paste")
         .arg("--watch")
@@ -124,9 +118,7 @@ async fn run_wl_paste_watch_once(
         if n == 0 { break; }
         if buffer.ends_with(&[0]) { buffer.pop(); }
         if let Ok(content) = String::from_utf8(buffer.clone()) {
-            if content.len() >= min_length {
-                insert_clipboard_entry_with_config(&app_handle, &content, min_length, max_entries).await;
-            }
+            insert_clipboard_entry(&app_handle, &content).await;
         }
         buffer.clear();
     }
@@ -137,7 +129,7 @@ async fn run_wl_paste_watch_once(
 
 /// Fallback monitor: polls `arboard::Clipboard` every 500ms.
 /// Used when wl-paste is not available (e.g. X11, missing wl-clipboard package).
-async fn start_arboard_polling(app_handle: AppHandle, config: ClipboardMonitorConfig) -> Result<(), MonitorError> {
+async fn start_arboard_polling(app_handle: AppHandle) -> Result<(), MonitorError> {
     // Verify that arboard can open the clipboard at all before spawning the loop
     let _test_clipboard = arboard::Clipboard::new()
         .map_err(|e| MonitorError::FallbackPollingError(format!("Cannot open clipboard: {}", e)))?;
@@ -152,8 +144,6 @@ async fn start_arboard_polling(app_handle: AppHandle, config: ClipboardMonitorCo
         };
 
         let mut last_text = String::new();
-        let min_length = config.min_content_length;
-        let max_entries = config.max_entries;
 
         loop {
             std::thread::sleep(std::time::Duration::from_millis(500));
@@ -163,7 +153,7 @@ async fn start_arboard_polling(app_handle: AppHandle, config: ClipboardMonitorCo
                 Err(_) => continue,
             };
 
-            if current == last_text || current.len() < min_length {
+            if current == last_text {
                 continue;
             }
 
@@ -173,7 +163,7 @@ async fn start_arboard_polling(app_handle: AppHandle, config: ClipboardMonitorCo
             let handle = app_handle.clone();
             let text = current;
             tauri::async_runtime::spawn(async move {
-                insert_clipboard_entry_with_config(&handle, &text, min_length, max_entries).await;
+                insert_clipboard_entry(&handle, &text).await;
             });
         }
     });
@@ -181,16 +171,22 @@ async fn start_arboard_polling(app_handle: AppHandle, config: ClipboardMonitorCo
     Ok(())
 }
 
-pub async fn insert_clipboard_entry(app_handle: &AppHandle, content: &str) {
-    insert_clipboard_entry_with_config(app_handle, content, 3, 500).await;
+pub async fn insert_clipboard_entry<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>, content: &str) {
+    let state = app_handle.state::<AppState>();
+    let (min_length, dedup_window_ms, max_entries) = {
+        let config = state.clipboard_config.read().unwrap();
+        (config.min_content_length, config.dedup_window_ms, config.max_entries)
+    };
+    insert_clipboard_entry_with_config(app_handle, content, min_length, max_entries, dedup_window_ms).await;
 }
 
 /// Shared insertion logic used by both wl-paste and arboard monitors.
-pub async fn insert_clipboard_entry_with_config(
-    app_handle: &AppHandle,
+pub async fn insert_clipboard_entry_with_config<R: tauri::Runtime>(
+    app_handle: &tauri::AppHandle<R>,
     content: &str,
     min_length: usize,
     max_entries: u32,
+    dedup_window_ms: u64,
 ) {
     if content.len() < min_length {
         return;
@@ -210,11 +206,16 @@ pub async fn insert_clipboard_entry_with_config(
     let state = app_handle.state::<AppState>();
     let pool = &state.db;
 
-    // Check duplicate
-    let existing = sqlx::query("SELECT id FROM clipboard_history WHERE content_hash = ?")
-        .bind(&hash)
-        .fetch_optional(pool)
-        .await;
+    // Hash nur innerhalb des Zeitfensters prüfen
+    let dedup_cutoff = chrono::Utc::now().timestamp_millis() - dedup_window_ms as i64;
+
+    let existing = sqlx::query(
+        "SELECT id FROM clipboard_history WHERE content_hash = ? AND captured_at > ?"
+    )
+    .bind(&hash)
+    .bind(dedup_cutoff)
+    .fetch_optional(pool)
+    .await;
 
     match existing {
         Ok(None) => {

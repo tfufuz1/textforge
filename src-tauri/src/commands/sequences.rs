@@ -358,6 +358,7 @@ mod tests {
             db: db.clone(),
             undo_stack: std::sync::Mutex::new(crate::commands::undo::UndoStack::new()),
             regex_cache: std::sync::Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
+            clipboard_config: std::sync::RwLock::new(crate::clipboard::ClipboardMonitorConfig::default()),
         });
         let state = app.state::<AppState>();
 

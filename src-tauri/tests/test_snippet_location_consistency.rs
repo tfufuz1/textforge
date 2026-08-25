@@ -15,6 +15,7 @@ async fn test_snippet_location_consistency() {
         db: db.clone(),
         undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
         regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
+        clipboard_config: std::sync::RwLock::new(textforge::clipboard::ClipboardMonitorConfig::default()),
     });
     let state = app.state::<AppState>();
 

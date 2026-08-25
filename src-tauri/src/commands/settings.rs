@@ -73,6 +73,22 @@ pub async fn set_setting(
         .execute(&state.db)
         .await
         .map_err(|e| e.to_string())?;
+
+    if let Ok(mut config) = state.clipboard_config.write() {
+        match key.as_str() {
+            "clipboard.max_entries" => {
+                if let Ok(v) = value.parse::<u32>() { config.max_entries = v; }
+            }
+            "clipboard.min_length" => {
+                if let Ok(v) = value.parse::<usize>() { config.min_content_length = v; }
+            }
+            "clipboard.dedup_window_ms" => {
+                if let Ok(v) = value.parse::<u64>() { config.dedup_window_ms = v; }
+            }
+            _ => {}
+        }
+    }
+
     Ok(())
 }
 

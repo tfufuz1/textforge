@@ -47,11 +47,31 @@ async fn main() {
                     .flatten()
                     .and_then(|v| v.parse::<usize>().ok())
                     .unwrap_or(50);
+
+                // Settings aus DB laden
+                let max_entries = sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key = 'clipboard.max_entries'")
+                    .fetch_optional(&db).await.ok().flatten()
+                    .and_then(|v| v.parse::<u32>().ok()).unwrap_or(500);
+
+                let min_length = sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key = 'clipboard.min_length'")
+                    .fetch_optional(&db).await.ok().flatten()
+                    .and_then(|v| v.parse::<usize>().ok()).unwrap_or(1);
+
+                let dedup_window_ms = sqlx::query_scalar::<_, String>("SELECT value FROM settings WHERE key = 'clipboard.dedup_window_ms'")
+                    .fetch_optional(&db).await.ok().flatten()
+                    .and_then(|v| v.parse::<u64>().ok()).unwrap_or(500);
+
+                let config = clipboard::ClipboardMonitorConfig {
+                    min_content_length: min_length,
+                    dedup_window_ms,
+                    max_entries,
+                };
                 
                 app_handle.manage(AppState {
                     db: db.clone(),
                     undo_stack: Mutex::new(commands::undo::UndoStack::new_with_size(max_undo)),
                     regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
+                    clipboard_config: std::sync::RwLock::new(config),
                 });
 
                 // STATUS: Implemented (Phase 1 - Wayland/arboard Clipboard Monitor)
