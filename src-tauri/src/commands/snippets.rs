@@ -1200,17 +1200,15 @@ pub async fn preview_template_variables_for_selection(
     struct Row { content: String }
 
     let mut fetched_contents = Vec::new();
-    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
     for id in &snippet_ids {
         if let Ok(Some(row)) = sqlx::query_as::<_, Row>("SELECT content FROM snippets WHERE id = ?")
             .bind(id)
-            .fetch_optional(&mut *tx)
+            .fetch_optional(&state.db)
             .await
         {
             fetched_contents.push(row.content);
         }
     }
-    tx.commit().await.map_err(|e| e.to_string())?;
 
     struct VarAggregator {
         default_val: Option<String>,
@@ -1436,50 +1434,56 @@ pub async fn render_template(
     // Schritt 3: {{#if}} / {{#unless}} Conditionals verarbeiten
     let processed_content = process_conditionals(&looped_content, &full_context);
 
-    let mut output = processed_content.clone();
     let mut resolved_variables: HashMap<String, String> = HashMap::new();
     let mut unresolved_vars: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
 
-    // Collect all matches first to avoid borrow issues with replace
-    let matches: Vec<(String, String, Option<String>, Option<String>)> = re
-        .captures_iter(&processed_content)
-        .filter_map(|cap| {
-            let name = cap.get(1).unwrap().as_str().to_string();
-            // Block-Tags überspringen
-            if name.starts_with('#') || name.starts_with('/')
-                || name.starts_with('@') || name == "this" || name == "else" {
-                return None;
-            }
-            let full = cap.get(0).unwrap().as_str().to_string();
-            let default_val = cap.get(2).map(|m| m.as_str().trim().to_string())
-                .filter(|s| !s.is_empty());
-            let filter = cap.get(3).map(|m| m.as_str().trim().to_string())
-                .filter(|s| !s.is_empty());
-            Some((full, name, default_val, filter))
-        })
-        .collect();
+    let output = re.replace_all(&processed_content, |caps: &regex::Captures| {
+        let var_name = caps.get(1).map(|m| m.as_str()).unwrap_or_default();
 
-    for (full, var_name, default_val, filter) in matches {
-        let raw_val = full_context.get(&var_name).cloned()
-            .or(default_val.clone());
+        // Block-Tags überspringen → unverändert zurückgeben
+        if var_name.starts_with('#') || var_name.starts_with('/')
+            || var_name.starts_with('@') || var_name == "this" || var_name == "else" {
+            return caps.get(0).unwrap().as_str().to_string();
+        }
+
+        let default_val = caps.get(2).map(|m| m.as_str().trim().to_string())
+            .filter(|s| !s.is_empty());
+        let filter_chain = caps.get(3).map(|m| m.as_str().trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        let raw_val = full_context.get(var_name).cloned().or(default_val.clone());
 
         if let Some(val) = raw_val {
-            // Apply chained filters if present
-            let filtered_val = apply_template_filters(&val, filter.as_deref());
-            output = output.replace(&full, &filtered_val);
-            resolved_variables.insert(var_name.clone(), filtered_val);
+            let filtered = apply_template_filters(&val, filter_chain.as_deref());
+            // Wert wird DIREKT eingesetzt – kein zweiter Replace-Pass möglich
+            filtered
         } else {
-            if !unresolved_vars.contains(&var_name) {
-                unresolved_vars.push(var_name.clone());
+            if !unresolved_vars.contains(&var_name.to_string()) {
+                unresolved_vars.push(var_name.to_string());
             }
             if strict {
-                // Im Strict-Modus: Warnung, Variable bleibt als {{var}} erhalten
-                warnings.push(format!("Fehlende Variable: {{{{{}}}}} ", var_name));
-                // Variable bleibt unverändert im Output (kein replace)
+                warnings.push(format!("Fehlende Variable: {{{{{}}}}}", var_name));
             }
-            // Im Non-Strict-Modus: Variable bleibt als {{var}} erhalten (Spec § 6.3)
-            // KEIN output.replace() → Variable bleibt sichtbar
+            // Placeholder erhalten
+            caps.get(0).unwrap().as_str().to_string()
+        }
+    }).to_string();
+
+    // resolved_variables separat befüllen (kein replace-Loop mehr nötig):
+    let re2 = regex::Regex::new(r"\{\{\s*([a-zA-Z0-9_\-]+)(?::([^|{}]*))?((?:\|[a-zA-Z0-9_:]+)*)\s*\}\}").unwrap();
+    for caps in re2.captures_iter(&processed_content) {
+        let name = caps.get(1).map(|m| m.as_str().to_string()).unwrap_or_default();
+        if name.starts_with('#') || name.starts_with('/')
+            || name.starts_with('@') || name == "this" || name == "else" {
+            continue;
+        }
+        let default_val = caps.get(2).map(|m| m.as_str().trim().to_string()).filter(|s| !s.is_empty());
+        let filter_chain = caps.get(3).map(|m| m.as_str().trim().to_string()).filter(|s| !s.is_empty());
+        let raw_val = full_context.get(&name).cloned().or(default_val);
+        if let Some(val) = raw_val {
+            let filtered = apply_template_filters(&val, filter_chain.as_deref());
+            resolved_variables.insert(name, filtered);
         }
     }
 

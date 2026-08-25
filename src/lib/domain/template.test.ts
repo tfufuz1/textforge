@@ -43,6 +43,14 @@ describe('TemplateRenderer', () => {
     }
   });
 
+  it('prevents template injection when variable value contains placeholder syntax', () => {
+    const res = TemplateRenderer.render('{{a}} und {{b}}', { a: '{{b}}', b: 'INJECTED' });
+    expect(res._tag).toBe('Ok');
+    if (res._tag === 'Ok') {
+      expect(res.value.output).toBe('{{b}} und INJECTED'); // a → literal "{{b}}", nicht expandiert
+    }
+  });
+
   // ── Einzelne Filter ─────────────────────────────────────────────────
   it('applies single filter to variables', () => {
     const res = TemplateRenderer.render('Hello {{name|upper}}!', { name: 'world' });
