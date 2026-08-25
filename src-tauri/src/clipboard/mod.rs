@@ -172,22 +172,20 @@ async fn start_arboard_polling(app_handle: AppHandle) -> Result<(), MonitorError
 }
 
 pub async fn insert_clipboard_entry<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>, content: &str) {
-    let state = app_handle.state::<AppState>();
-    let (min_length, dedup_window_ms, max_entries) = {
-        let config = state.clipboard_config.read().unwrap();
-        (config.min_content_length, config.dedup_window_ms, config.max_entries)
-    };
-    insert_clipboard_entry_with_config(app_handle, content, min_length, max_entries, dedup_window_ms).await;
+    insert_clipboard_entry_with_config(app_handle, content).await;
 }
 
 /// Shared insertion logic used by both wl-paste and arboard monitors.
 pub async fn insert_clipboard_entry_with_config<R: tauri::Runtime>(
     app_handle: &tauri::AppHandle<R>,
     content: &str,
-    min_length: usize,
-    max_entries: u32,
-    dedup_window_ms: u64,
 ) {
+    let state = app_handle.state::<AppState>();
+    let (min_length, dedup_window_ms, max_entries) = {
+        let config = state.clipboard_config.read().unwrap();
+        (config.min_content_length, config.dedup_window_ms, config.max_entries)
+    };
+
     if content.len() < min_length {
         return;
     }
