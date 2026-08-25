@@ -30,6 +30,7 @@ async fn test_bulk_transform_pipeline_error_partial_success() {
         db: db.clone(),
         undo_stack: Mutex::new(UndoStack::new()),
         regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
+        clipboard_config: std::sync::RwLock::new(textforge::clipboard::ClipboardMonitorConfig::default()),
     });
 
     let state = app.state::<AppState>();
@@ -98,6 +99,7 @@ async fn test_bulk_export_progress_and_transaction() {
         db: db.clone(),
         undo_stack: Mutex::new(UndoStack::new()),
         regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
+        clipboard_config: std::sync::RwLock::new(textforge::clipboard::ClipboardMonitorConfig::default()),
     });
 
     let state = app.state::<AppState>();

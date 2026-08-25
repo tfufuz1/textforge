@@ -200,6 +200,7 @@ async fn test_compose_clipboard_entries_to_snippet() {
         db: db.clone(),
         undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
         regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
+        clipboard_config: std::sync::RwLock::new(textforge::clipboard::ClipboardMonitorConfig::default()),
     });
     let state = app.state::<AppState>();
 
@@ -286,6 +287,7 @@ async fn test_promote_clipboard_entries_bulk() {
         db: db.clone(),
         undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
         regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
+        clipboard_config: std::sync::RwLock::new(textforge::clipboard::ClipboardMonitorConfig::default()),
     });
     let state = app.state::<AppState>();
 
@@ -352,6 +354,7 @@ async fn test_promote_clipboard_entries_bulk_partial_failure() {
         db: db.clone(),
         undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
         regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
+        clipboard_config: std::sync::RwLock::new(textforge::clipboard::ClipboardMonitorConfig::default()),
     });
     let state = app.state::<AppState>();
 
@@ -404,4 +407,99 @@ async fn test_promote_clipboard_entries_bulk_partial_failure() {
     let stack = state.undo_stack.lock().unwrap();
     assert_eq!(stack.undo_history.len(), 1);
     assert!(stack.undo_history[0].description.contains("9 Snippets aus Zwischenablage erstellt"));
+}
+
+#[tokio::test]
+async fn test_clipboard_dedup_window() {
+    use std::sync::Mutex;
+    use tauri::Manager;
+    use textforge::clipboard::{insert_clipboard_entry, ClipboardMonitorConfig};
+    use textforge::AppState;
+
+    let tmp = NamedTempFile::new().unwrap();
+    let db = init_db(tmp.path()).await.unwrap();
+
+    let app = tauri::test::mock_app();
+    app.manage(AppState {
+        db: db.clone(),
+        undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
+        regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
+        clipboard_config: std::sync::RwLock::new(ClipboardMonitorConfig {
+            min_content_length: 1,
+            dedup_window_ms: 100, // 100ms time window
+            max_entries: 500,
+        }),
+    });
+
+    let text = "Test deduplication content";
+
+    let handle = app.handle();
+
+    // 1st insertion
+    insert_clipboard_entry(handle, text).await;
+
+    let (count1,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM clipboard_history")
+        .fetch_one(&db).await.unwrap();
+    assert_eq!(count1, 1);
+
+    // Immediate 2nd insertion within dedup window (should be ignored)
+    let state = app.state::<AppState>();
+    {
+        let cfg = state.clipboard_config.read().unwrap();
+        println!("Config: dedup_window_ms={}, min_len={}", cfg.dedup_window_ms, cfg.min_content_length);
+    }
+    let rows_before: Vec<(String, i64)> = sqlx::query_as("SELECT content_hash, captured_at FROM clipboard_history").fetch_all(&db).await.unwrap();
+    println!("Rows before 2nd insert: {:?}", rows_before);
+    let now = chrono::Utc::now().timestamp_millis();
+    println!("Now before 2nd insert: {}, cutoff: {}", now, now - 100);
+
+    insert_clipboard_entry(handle, text).await;
+
+    let rows_after: Vec<(String, i64)> = sqlx::query_as("SELECT content_hash, captured_at FROM clipboard_history").fetch_all(&db).await.unwrap();
+    println!("Rows after 2nd insert: {:?}", rows_after);
+
+    let (count2,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM clipboard_history")
+        .fetch_one(&db).await.unwrap();
+    assert_eq!(count2, 1);
+
+    // Wait until dedup window passes (>100ms)
+    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+
+    // 3rd insertion after window expired (should be inserted)
+    insert_clipboard_entry(handle, text).await;
+
+    let (count3,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM clipboard_history")
+        .fetch_one(&db).await.unwrap();
+    assert_eq!(count3, 2);
+}
+
+#[tokio::test]
+async fn test_set_setting_live_updates_clipboard_config() {
+    use std::sync::Mutex;
+    use tauri::Manager;
+    use textforge::commands::settings::set_setting;
+    use textforge::clipboard::ClipboardMonitorConfig;
+    use textforge::AppState;
+
+    let tmp = NamedTempFile::new().unwrap();
+    let db = init_db(tmp.path()).await.unwrap();
+
+    let app = tauri::test::mock_app();
+    app.manage(AppState {
+        db: db.clone(),
+        undo_stack: Mutex::new(textforge::commands::undo::UndoStack::new()),
+        regex_cache: Mutex::new(lru::LruCache::new(std::num::NonZeroUsize::new(100).unwrap())),
+        clipboard_config: std::sync::RwLock::new(ClipboardMonitorConfig::default()),
+    });
+
+    let state = app.state::<AppState>();
+
+    set_setting("clipboard.dedup_window_ms".to_string(), "1234".to_string(), state.clone()).await.unwrap();
+    set_setting("clipboard.min_length".to_string(), "10".to_string(), state.clone()).await.unwrap();
+    set_setting("clipboard.max_entries".to_string(), "100".to_string(), state.clone()).await.unwrap();
+
+    let config = state.clipboard_config.read().unwrap();
+    assert_eq!(config.dedup_window_ms, 1234);
+    assert_eq!(config.min_content_length, 10);
+    assert_eq!(config.max_entries, 100);
 }
