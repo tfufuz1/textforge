@@ -31,10 +31,10 @@ export const Notifications = {
   undoAvailable:     (desc: string):  AppNotification => ({ id: generateId(), severity: 'info',    title: 'Rückgängig möglich', message: Option.some(desc),                          duration: 3000, action: Option.some({ label: 'Rückgängig', handler: 'undo' }), createdAt: now() }),
 } as const;
 
-export const notificationsStore = writable<AppNotification[]>([]);
+const _rawNotificationsStore = writable<AppNotification[]>([]);
 
 export function pushNotification(notification: AppNotification) {
-    notificationsStore.update(n => [...n, notification]);
+    _rawNotificationsStore.update(n => [...n, notification]);
     if (notification.duration > 0) {
         setTimeout(() => {
             dismissNotification(notification.id);
@@ -43,5 +43,12 @@ export function pushNotification(notification: AppNotification) {
 }
 
 export function dismissNotification(id: string) {
-    notificationsStore.update(n => n.filter(x => x.id !== id));
+    _rawNotificationsStore.update(n => n.filter(x => x.id !== id));
 }
+
+export const notificationsStore = {
+    subscribe: _rawNotificationsStore.subscribe,
+    set: _rawNotificationsStore.set,
+    update: _rawNotificationsStore.update,
+    push: pushNotification
+};

@@ -16,8 +16,10 @@ import {
     type CreateSnippetDto,
     type UpdateSnippetDto
 } from '../ipc/snippets';
+import { suggestTags } from '../ipc/tags';
 import { refreshUndoState } from './undo';
-
+import { pushNotification } from './notifications';
+import { Option, type UnixMs } from '../domain/adts';
 import { executeBulkOperation, type BulkOperation } from '../ipc/bulk';
 
 export const snippetsStore = writable<SnippetListItemDto[]>([]);
@@ -27,6 +29,33 @@ export const isLoadingMoreStore = writable<boolean>(false);
 export const activeSnippetStore = writable<SnippetDto | null>(null);
 export const selectedTagStore = writable<string | null>(null);
 export const selectedSnippetIdsStore = writable<Set<string>>(new Set());
+
+export const allTagsStore = writable<{ tag: string; count: number }[]>([]);
+
+function handleError(operation: string, e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    console.error(`[snippets] ${operation}:`, e);
+    pushNotification({
+        id: crypto.randomUUID(),
+        severity: 'error',
+        title: 'Fehler',
+        message: Option.some(`${operation}: ${message}`),
+        duration: 5000,
+        action: Option.none(),
+        createdAt: Date.now() as UnixMs,
+    });
+}
+
+export async function loadAllTags() {
+    try {
+        const tagInfos = await suggestTags('', 500);
+        allTagsStore.set(tagInfos.map(t => ({ tag: t.name, count: t.usageCount })));
+    } catch (e) {
+        handleError('Tags laden', e);
+    }
+}
+
+export const tagCloud = derived(allTagsStore, $tags => $tags);
 
 export function toggleSelectSnippetId(id: string) {
     selectedSnippetIdsStore.update(set => {
@@ -52,10 +81,9 @@ export async function handleBulkOperation(operation: BulkOperation) {
     try {
         await executeBulkOperation(operation);
         clearSnippetSelection();
-        await loadSnippets();
-        await refreshUndoState();
+        await Promise.all([loadSnippets(), loadAllTags(), refreshUndoState()]);
     } catch (e) {
-        console.error("Bulk operation failed:", e);
+        handleError('Massenoperation ausführen', e);
     }
 }
 
@@ -76,6 +104,31 @@ export const snippetFilterStore = writable<SnippetFilterDto>({
     sortBy: 'updatedAt',
     sortDir: 'desc'
 });
+
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function setSearchQuery(query: string) {
+    snippetFilterStore.update(f => ({ ...f, searchQuery: query }));
+
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+        loadSnippets();
+    }, 250);
+}
+
+export function setFilter(patch: Partial<SnippetFilterDto>) {
+    if ('searchQuery' in patch) {
+        setSearchQuery(patch.searchQuery ?? '');
+        const { searchQuery: _, ...rest } = patch;
+        if (Object.keys(rest).length > 0) {
+            snippetFilterStore.update(f => ({ ...f, ...rest }));
+            loadSnippets();
+        }
+    } else {
+        snippetFilterStore.update(f => ({ ...f, ...patch }));
+        loadSnippets();
+    }
+}
 
 export async function loadSnippets() {
     const filter = get(snippetFilterStore);
@@ -100,7 +153,7 @@ export async function loadSnippets() {
         totalCountStore.set(res.totalCount);
         hasMoreStore.set(res.hasMore);
     } catch (e) {
-        console.error("Failed to load snippets:", e);
+        handleError('Snippets laden', e);
     }
 }
 
@@ -131,7 +184,7 @@ export async function loadMoreSnippets() {
         totalCountStore.set(res.totalCount);
         hasMoreStore.set(res.hasMore);
     } catch (e) {
-        console.error("Failed to load more snippets:", e);
+        handleError('Weitere Snippets laden', e);
     } finally {
         isLoadingMoreStore.set(false);
     }
@@ -146,19 +199,18 @@ export async function selectSnippet(id: string | null) {
         const snippet = await getSnippet(id);
         activeSnippetStore.set(snippet);
     } catch (e) {
-        console.error("Failed to load snippet details:", e);
+        handleError('Snippet-Details laden', e);
     }
 }
 
 export async function handleCreateSnippet(draft: CreateSnippetDto): Promise<SnippetDto | null> {
     try {
         const created = await createSnippet(draft);
-        await loadSnippets();
+        await Promise.all([loadSnippets(), loadAllTags(), refreshUndoState()]);
         activeSnippetStore.set(created);
-        await refreshUndoState();
         return created;
     } catch (e) {
-        console.error("Failed to create snippet:", e);
+        handleError('Snippet erstellen', e);
         return null;
     }
 }
@@ -166,48 +218,46 @@ export async function handleCreateSnippet(draft: CreateSnippetDto): Promise<Snip
 export async function handleUpdateSnippet(id: string, draft: UpdateSnippetDto) {
     try {
         const updated = await updateSnippet(id, draft);
-        await loadSnippets();
+        await Promise.all([loadSnippets(), loadAllTags(), refreshUndoState()]);
         activeSnippetStore.set(updated);
-        await refreshUndoState();
     } catch (e) {
-        console.error("Failed to update snippet:", e);
+        handleError('Snippet aktualisieren', e);
     }
 }
 
 export async function togglePinSnippet(item: SnippetListItemDto) {
     try {
         await updateSnippet(item.id, { isPinned: !item.isPinned });
-        await loadSnippets();
+        await Promise.all([loadSnippets(), loadAllTags()]);
         if (get(activeSnippetStore)?.id === item.id) {
             const updated = await getSnippet(item.id);
             activeSnippetStore.set(updated);
         }
     } catch (e) {
-        console.error("Failed to toggle pin on snippet:", e);
+        handleError('Anheften umschalten', e);
     }
 }
 
 export async function toggleFavoriteSnippet(item: SnippetListItemDto) {
     try {
         await updateSnippet(item.id, { isFavorite: !item.isFavorite });
-        await loadSnippets();
+        await Promise.all([loadSnippets(), loadAllTags()]);
         if (get(activeSnippetStore)?.id === item.id) {
             const updated = await getSnippet(item.id);
             activeSnippetStore.set(updated);
         }
     } catch (e) {
-        console.error("Failed to toggle favorite on snippet:", e);
+        handleError('Favorit umschalten', e);
     }
 }
 
 export async function handleDuplicateSnippet(id: string) {
     try {
         const duplicated = await duplicateSnippet(id);
-        await loadSnippets();
+        await Promise.all([loadSnippets(), loadAllTags(), refreshUndoState()]);
         activeSnippetStore.set(duplicated);
-        await refreshUndoState();
     } catch (e) {
-        console.error("Failed to duplicate snippet:", e);
+        handleError('Snippet duplizieren', e);
     }
 }
 
@@ -216,14 +266,13 @@ export async function handleDuplicateSnippetsBulk(ids: string[], targetFolderId?
     try {
         const res = await duplicateSnippetsBulk(ids, targetFolderId);
         clearSnippetSelection();
-        await loadSnippets();
+        await Promise.all([loadSnippets(), loadAllTags(), refreshUndoState()]);
         if (res.succeeded.length > 0) {
             activeSnippetStore.set(res.succeeded[res.succeeded.length - 1]);
         }
-        await refreshUndoState();
         return res;
     } catch (e) {
-        console.error("Failed to duplicate snippets bulk:", e);
+        handleError('Mehrere Snippets duplizieren', e);
     }
 }
 
@@ -233,10 +282,9 @@ export async function handleTrashSnippet(id: string) {
         if (get(activeSnippetStore)?.id === id) {
             activeSnippetStore.set(null);
         }
-        await loadSnippets();
-        await refreshUndoState();
+        await Promise.all([loadSnippets(), loadAllTags(), refreshUndoState()]);
     } catch (e) {
-        console.error("Failed to trash snippet:", e);
+        handleError('Snippet in Papierkorb verschieben', e);
     }
 }
 
@@ -246,10 +294,9 @@ export async function handleRestoreSnippet(id: string) {
         if (get(activeSnippetStore)?.id === id) {
             activeSnippetStore.set(null);
         }
-        await loadSnippets();
-        await refreshUndoState();
+        await Promise.all([loadSnippets(), loadAllTags(), refreshUndoState()]);
     } catch (e) {
-        console.error("Failed to restore snippet:", e);
+        handleError('Snippet wiederherstellen', e);
     }
 }
 
@@ -259,10 +306,9 @@ export async function handleDeleteSnippetPermanently(id: string) {
         if (get(activeSnippetStore)?.id === id) {
             activeSnippetStore.set(null);
         }
-        await loadSnippets();
-        await refreshUndoState();
+        await Promise.all([loadSnippets(), loadAllTags(), refreshUndoState()]);
     } catch (e) {
-        console.error("Failed to delete snippet permanently:", e);
+        handleError('Snippet dauerhaft löschen', e);
     }
 }
 
@@ -270,19 +316,8 @@ export async function handleEmptyTrash() {
     try {
         await emptyTrash();
         activeSnippetStore.set(null);
-        await loadSnippets();
-        await refreshUndoState();
+        await Promise.all([loadSnippets(), loadAllTags(), refreshUndoState()]);
     } catch (e) {
-        console.error("Failed to empty trash:", e);
+        handleError('Papierkorb leeren', e);
     }
 }
-
-export const tagCloud = derived(snippetsStore, $snippets => {
-    const tagsMap = new Map<string, number>();
-    for (const item of $snippets) {
-        for (const tag of item.tags) {
-            tagsMap.set(tag, (tagsMap.get(tag) || 0) + 1);
-        }
-    }
-    return Array.from(tagsMap.entries()).map(([tag, count]) => ({ tag, count }));
-});
