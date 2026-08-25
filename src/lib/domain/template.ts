@@ -244,6 +244,9 @@ export const TemplateRenderer = {
       });
 
       // Schritt 4: Variablen ersetzen (mit chained filter support)
+      // Single-pass substitution via String.prototype.replace callback:
+      // Prevents template injection because substituted variable values containing {{...}}
+      // are inserted directly without undergoing additional replacement passes.
       const renderRegex = new RegExp(VAR_REGEX.source, VAR_REGEX.flags);
       const output = processed.replace(renderRegex, (match: string, varName: string, defaultVal: string | undefined, filterChain: string | undefined) => {
         if (isBlockTag(varName)) return match;
